@@ -6,7 +6,6 @@ const API_BASE_URL = 'http://localhost:3001/api';
 function ConversionSection({ filename, emailCount }) {
   const [converting, setConverting] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [conversionId, setConversionId] = useState(null);
   const [conversionStatus, setConversionStatus] = useState('');
   const [conversionMessage, setConversionMessage] = useState('');
   
@@ -26,7 +25,6 @@ function ConversionSection({ filename, emailCount }) {
         emailCount
       });
 
-      setConversionId(response.data.conversionId);
       setConversionMessage(response.data.message);
 
       // Start polling for progress
@@ -93,7 +91,6 @@ function ConversionSection({ filename, emailCount }) {
   const resetConversion = () => {
     setConverting(false);
     setProgress(0);
-    setConversionId(null);
     setConversionStatus('');
     setConversionMessage('');
   };

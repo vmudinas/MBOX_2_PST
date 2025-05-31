@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:3001/api';
@@ -8,13 +8,7 @@ function EmailViewer({ email, filename }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (email && filename) {
-      loadFullEmail();
-    }
-  }, [email, filename]);
-
-  const loadFullEmail = async () => {
+  const loadFullEmail = useCallback(async () => {
     setLoading(true);
     setError('');
     
@@ -27,7 +21,13 @@ function EmailViewer({ email, filename }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filename, email]);
+
+  useEffect(() => {
+    if (email && filename) {
+      loadFullEmail();
+    }
+  }, [email, filename, loadFullEmail]);
 
   const formatDate = (dateString) => {
     try {
