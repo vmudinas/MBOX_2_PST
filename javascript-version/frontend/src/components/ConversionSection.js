@@ -9,6 +9,10 @@ function ConversionSection({ filename, emailCount }) {
   const [conversionId, setConversionId] = useState(null);
   const [conversionStatus, setConversionStatus] = useState('');
   const [conversionMessage, setConversionMessage] = useState('');
+  
+  // EML export state
+  const [exporting, setExporting] = useState(false);
+  const [exportResult, setExportResult] = useState(null);
 
   const startConversion = async () => {
     setConverting(true);
@@ -31,6 +35,30 @@ function ConversionSection({ filename, emailCount }) {
       console.error('Conversion error:', error);
       setConversionMessage('Failed to start conversion');
       setConverting(false);
+    }
+  };
+
+  const startEmlExport = async () => {
+    setExporting(true);
+    setExportResult(null);
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/export-to-eml`, {
+        filename
+      });
+
+      setExportResult(response.data);
+    } catch (error) {
+      console.error('EML export error:', error);
+      alert('Failed to export to EML format: ' + error.message);
+    }
+    
+    setExporting(false);
+  };
+
+  const downloadExport = () => {
+    if (exportResult && exportResult.downloadUrl) {
+      window.open(`${API_BASE_URL.replace('/api', '')}${exportResult.downloadUrl}`, '_blank');
     }
   };
 
@@ -70,40 +98,91 @@ function ConversionSection({ filename, emailCount }) {
     setConversionMessage('');
   };
 
+  const resetExport = () => {
+    setExportResult(null);
+  };
+
   return (
     <div className="conversion-section">
-      <h3>Convert to PST</h3>
-      <p>Convert your MBOX file containing {emailCount} emails to PST format</p>
+      <h3>Export Options</h3>
+      <p>Export your MBOX file containing {emailCount} emails</p>
 
-      {!converting && progress === 0 && (
-        <button onClick={startConversion} className="convert-btn">
-          Start PST Conversion
-        </button>
-      )}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+        {/* EML Export Section */}
+        <div style={{ padding: '20px', border: '1px solid #ddd', borderRadius: '8px', backgroundColor: '#f8f9fa' }}>
+          <h4 style={{ marginTop: 0, color: '#28a745' }}>Export to EML Files</h4>
+          <p style={{ fontSize: '14px', color: '#666' }}>
+            Convert to individual EML files that can be imported into most email clients
+          </p>
+          
+          {!exporting && !exportResult && (
+            <button onClick={startEmlExport} className="convert-btn" style={{ backgroundColor: '#28a745' }}>
+              Export to EML
+            </button>
+          )}
 
-      {converting && (
-        <div>
-          <p>{conversionMessage}</p>
-          <div className="progress-bar">
-            <div 
-              className="progress-fill" 
-              style={{ width: `${progress}%` }}
-            ></div>
-          </div>
-          <p>{progress}% complete</p>
+          {exporting && (
+            <div>
+              <p>Exporting emails to EML format...</p>
+              <div className="progress-bar">
+                <div className="progress-fill-spinner"></div>
+              </div>
+            </div>
+          )}
+
+          {exportResult && (
+            <div>
+              <div className="success" style={{ backgroundColor: '#d4edda', color: '#155724' }}>
+                ✅ Export completed! {exportResult.emailCount} emails exported
+              </div>
+              <button onClick={downloadExport} className="convert-btn" style={{ backgroundColor: '#007bff', marginRight: '10px' }}>
+                Download ZIP ({Math.round(exportResult.zipSize / 1024)} KB)
+              </button>
+              <button onClick={resetExport} className="convert-btn" style={{ backgroundColor: '#6c757d' }}>
+                Export Another
+              </button>
+            </div>
+          )}
         </div>
-      )}
 
-      {progress === 100 && conversionStatus === 'completed' && (
-        <div>
-          <div className="success">
-            {conversionMessage}
-          </div>
-          <button onClick={resetConversion} className="convert-btn">
-            Convert Another File
-          </button>
+        {/* PST Conversion Section */}
+        <div style={{ padding: '20px', border: '1px solid #ddd', borderRadius: '8px', backgroundColor: '#fff3cd' }}>
+          <h4 style={{ marginTop: 0, color: '#856404' }}>Convert to PST (Demo)</h4>
+          <p style={{ fontSize: '14px', color: '#666' }}>
+            Simulated PST conversion process (requires C# version for actual PST files)
+          </p>
+
+          {!converting && progress === 0 && (
+            <button onClick={startConversion} className="convert-btn" style={{ backgroundColor: '#ffc107', color: '#212529' }}>
+              Simulate PST Conversion
+            </button>
+          )}
+
+          {converting && (
+            <div>
+              <p>{conversionMessage}</p>
+              <div className="progress-bar">
+                <div 
+                  className="progress-fill" 
+                  style={{ width: `${progress}%` }}
+                ></div>
+              </div>
+              <p>{progress}% complete</p>
+            </div>
+          )}
+
+          {progress === 100 && conversionStatus === 'completed' && (
+            <div>
+              <div className="success">
+                {conversionMessage}
+              </div>
+              <button onClick={resetConversion} className="convert-btn" style={{ backgroundColor: '#ffc107', color: '#212529' }}>
+                Convert Another File
+              </button>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       <div style={{ 
         marginTop: '20px', 

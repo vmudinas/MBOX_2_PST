@@ -12,6 +12,7 @@ This directory contains the JavaScript/Node.js implementation of the MBOX to PST
 - Upload and parse MBOX files
 - View email list with metadata (sender, subject, date)
 - View full email content including headers and body
+- **Export to EML files** - Convert emails to individual EML files that can be imported into most email clients
 - Simulated PST conversion process with progress tracking
 - Responsive web interface
 
@@ -62,12 +63,15 @@ The React app will run on http://localhost:3000
 2. Upload an MBOX file using the file input
 3. Browse through the parsed emails in the list
 4. Click on any email to view its full content
-5. Use the conversion section to simulate PST conversion
+5. **Export to EML**: Download emails as individual EML files in a ZIP archive
+6. Or simulate PST conversion process (demonstration only)
 
 ## API Endpoints
 
 - `POST /api/upload-mbox` - Upload and parse MBOX file
 - `GET /api/email/:filename/:id` - Get full email content
+- `POST /api/export-to-eml` - Export emails to EML format and create ZIP archive
+- `GET /api/download-export/:filename` - Download EML export ZIP file
 - `POST /api/convert-to-pst` - Start PST conversion (simulated)
 - `GET /api/conversion-progress/:id` - Get conversion progress
 - `GET /api/health` - Health check
@@ -77,6 +81,7 @@ The React app will run on http://localhost:3000
 This JavaScript implementation provides:
 - ✅ MBOX file parsing
 - ✅ Email viewing and browsing
+- ✅ **EML export** (individual email files that work with most email clients)
 - ✅ Conversion process simulation
 - ❌ Actual PST file creation (requires specialized libraries)
 

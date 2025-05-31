@@ -4,6 +4,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const MboxParser = require('./mboxParser');
+const EmlExporter = require('./emlExporter');
 
 const app = express();
 const port = 3001;
@@ -28,8 +29,9 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-// Initialize MBOX parser
+// Initialize MBOX parser and EML exporter
 const mboxParser = new MboxParser();
+const emlExporter = new EmlExporter();
 
 // Routes
 
@@ -120,6 +122,69 @@ app.get('/api/conversion-progress/:id', (req, res) => {
     status: progress < 100 ? 'converting' : 'completed',
     message: progress < 100 ? 'Converting emails...' : 'Conversion completed!'
   });
+});
+
+// Export to EML files
+app.post('/api/export-to-eml', async (req, res) => {
+  try {
+    const { filename } = req.body;
+    
+    if (!filename) {
+      return res.status(400).json({ error: 'Filename is required' });
+    }
+    
+    const filePath = path.join('./uploads', filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'MBOX file not found' });
+    }
+
+    // Parse the MBOX file
+    const emails = await mboxParser.parseMboxFile(filePath);
+    
+    // Export to EML files
+    const exportResult = await emlExporter.exportToEml(emails, filename);
+    
+    // Create ZIP archive
+    const zipResult = await emlExporter.createZipArchive(exportResult, filename);
+    
+    res.json({
+      success: true,
+      message: 'EML export completed',
+      exportPath: exportResult.exportPath,
+      zipPath: zipResult.zipPath,
+      emailCount: zipResult.emailCount,
+      zipSize: zipResult.size,
+      downloadUrl: `/api/download-export/${path.basename(zipResult.zipPath)}`
+    });
+
+  } catch (error) {
+    console.error('Error exporting to EML:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Download exported EML ZIP file
+app.get('/api/download-export/:filename', (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const filePath = path.join('./exports', filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Export file not found' });
+    }
+    
+    res.download(filePath, filename, (err) => {
+      if (err) {
+        console.error('Error downloading file:', err);
+        res.status(500).json({ error: 'Error downloading file' });
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error downloading export:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Health check

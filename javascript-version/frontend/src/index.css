@@ -181,6 +181,22 @@ code {
   transition: width 0.3s ease;
 }
 
+.progress-fill-spinner {
+  height: 100%;
+  background: linear-gradient(90deg, #27ae60 25%, transparent 25%, transparent 50%, #27ae60 50%, #27ae60 75%, transparent 75%);
+  background-size: 20px 20px;
+  animation: progress-animation 1s linear infinite;
+}
+
+@keyframes progress-animation {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 20px 0;
+  }
+}
+
 .error {
   color: #e74c3c;
   background-color: #fadbd8;
