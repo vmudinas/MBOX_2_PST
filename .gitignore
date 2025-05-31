@@ -4,3 +4,7 @@ obj/
 .vs/
 .vscode/
 *.tmp
+node_modules/
+*.log
+build/
+dist/
