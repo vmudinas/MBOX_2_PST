@@ -1,0 +1,630 @@
+@page "/mailbox"
+@using MboxToPstBlazorApp.Services
+@using Microsoft.AspNetCore.Components
+@using MimeKit
+@inject EmailService EmailService
+@inject GmailService GmailService
+@implements IDisposable
+@rendermode InteractiveServer
+
+<PageTitle>Mailbox</PageTitle>
+
+<h1>Email Mailbox</h1>
+
+<div class="row">
+    <div class="col-12">
+        <!-- Tab Navigation -->
+        <ul class="nav nav-tabs" id="mailboxTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link @(activeTab == "local" ? "active" : "")" 
+                        id="local-tab" 
+                        type="button" 
+                        role="tab" 
+                        @onclick="SetLocalTab">
+                    <i class="bi bi-folder-open"></i> Local Files
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link @(activeTab == "gmail" ? "active" : "")" 
+                        id="gmail-tab" 
+                        type="button" 
+                        role="tab" 
+                        @onclick="SetGmailTab">
+                    <i class="bi bi-envelope"></i> Gmail
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content" id="mailboxTabContent">
+            <!-- Local Files Tab -->
+            <div class="tab-pane fade @(activeTab == "local" ? "show active" : "")" 
+                 id="local" 
+                 role="tabpanel">
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5>Local Email Files</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- File Selector -->
+                        <div class="row mb-3">
+                            <div class="col-md-8">
+                                <label for="localFilePath" class="form-label">Select MBOX or PST File:</label>
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="localFilePath" 
+                                       @bind="localFilePath" 
+                                       placeholder="Enter path to MBOX or PST file" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="btn btn-outline-primary w-100 mt-4" for="localFileUpload">
+                                    <i class="bi bi-upload"></i> Upload File
+                                </label>
+                                <InputFile id="localFileUpload" 
+                                          class="d-none" 
+                                          OnChange="OnLocalFileUploaded" 
+                                          accept=".mbox,.pst" />
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <button class="btn btn-primary" 
+                                    @onclick="LoadLocalEmails" 
+                                    disabled="@isLoadingLocal">
+                                @if (isLoadingLocal)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                    <text>Loading...</text>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-folder-open"></i><text> Load Emails</text>
+                                }
+                            </button>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(localLoadingMessage))
+                        {
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle"></i> @localLoadingMessage
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gmail Tab -->
+            <div class="tab-pane fade @(activeTab == "gmail" ? "show active" : "")" 
+                 id="gmail" 
+                 role="tabpanel">
+                <div class="card mt-3">
+                    <div class="card-header">
+                        <h5>Gmail Integration</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (!GmailService.IsAuthenticated)
+                        {
+                            <div class="alert alert-warning">
+                                <i class="bi bi-exclamation-triangle"></i> 
+                                Gmail authentication is required to access your emails.
+                            </div>
+                            <button class="btn btn-success" 
+                                    @onclick="ConnectGmail" 
+                                    disabled="@isConnectingGmail">
+                                @if (isConnectingGmail)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                    <text>Connecting...</text>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-google"></i><text> Connect Gmail</text>
+                                }
+                            </button>
+                        }
+                        else
+                        {
+                            <div class="alert alert-success">
+                                <i class="bi bi-check-circle"></i> 
+                                Gmail connected successfully!
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <button class="btn btn-primary me-2" 
+                                            @onclick="RefreshGmailEmails" 
+                                            disabled="@isLoadingGmail">
+                                        @if (isLoadingGmail)
+                                        {
+                                            <span class="spinner-border spinner-border-sm me-2"></span>
+                                            <text>Loading...</text>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-arrow-clockwise"></i><text> Refresh Emails</text>
+                                        }
+                                    </button>
+                                    
+                                    @if (emails.Any() && activeTab == "gmail")
+                                    {
+                                        <button class="btn btn-outline-secondary ms-2" 
+                                                @onclick="SaveGmailToMbox" 
+                                                disabled="@isSavingMbox">
+                                            @if (isSavingMbox)
+                                            {
+                                                <span class="spinner-border spinner-border-sm me-2"></span>
+                                                <text>Saving...</text>
+                                            }
+                                            else
+                                            {
+                                                <i class="bi bi-download"></i><text> Save to MBOX</text>
+                                            }
+                                        </button>
+                                    }
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" checked="@autoRefreshEnabled" @onchange="ToggleAutoRefresh" id="autoRefresh">
+                                        <label class="form-check-label" for="autoRefresh">
+                                            Auto-refresh every 30 seconds
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(gmailLoadingMessage))
+                        {
+                            <div class="alert alert-info mt-3">
+                                <i class="bi bi-info-circle"></i> @gmailLoadingMessage
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Email List and Preview -->
+        @if (emails.Any())
+        {
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5>Email Messages (@emails.Count total)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- Email List -->
+                        <div class="col-md-6">
+                            <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                                <table class="table table-striped table-hover">
+                                    <thead class="table-dark sticky-top">
+                                        <tr>
+                                            <th>From</th>
+                                            <th>Subject</th>
+                                            <th>Date</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var email in GetPagedEmails())
+                                        {
+                                            <tr class="@(selectedEmail?.Subject == email.Subject && selectedEmail?.From == email.From ? "table-active" : "")"
+                                                style="cursor: pointer;"
+                                                @onclick="() => SelectEmail(email)">
+                                                <td>@email.From</td>
+                                                <td>@(string.IsNullOrEmpty(email.Subject) ? "(No Subject)" : email.Subject)</td>
+                                                <td>@email.Date.ToString("MM/dd/yyyy HH:mm")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Pagination -->
+                            @if (emails.Count > pageSize)
+                            {
+                                <nav>
+                                    <ul class="pagination justify-content-center">
+                                        <li class="page-item @(currentPage <= 1 ? "disabled" : "")">
+                                            <button class="page-link" @onclick="PreviousPage">Previous</button>
+                                        </li>
+                                        
+                                        @for (int i = Math.Max(1, currentPage - 2); i <= Math.Min(totalPages, currentPage + 2); i++)
+                                        {
+                                            <li class="page-item @(i == currentPage ? "active" : "")">
+                                                <button class="page-link" @onclick="() => GoToPage(i)">@i</button>
+                                            </li>
+                                        }
+                                        
+                                        <li class="page-item @(currentPage >= totalPages ? "disabled" : "")">
+                                            <button class="page-link" @onclick="NextPage">Next</button>
+                                        </li>
+                                    </ul>
+                                </nav>
+                            }
+                        </div>
+
+                        <!-- Email Preview -->
+                        <div class="col-md-6">
+                            @if (selectedEmail != null)
+                            {
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6>Email Preview</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="mb-2">
+                                            <strong>From:</strong> @selectedEmail.From
+                                        </div>
+                                        <div class="mb-2">
+                                            <strong>To:</strong> @selectedEmail.To
+                                        </div>
+                                        <div class="mb-2">
+                                            <strong>Subject:</strong> @selectedEmail.Subject
+                                        </div>
+                                        <div class="mb-2">
+                                            <strong>Date:</strong> @selectedEmail.Date.ToString("dddd, MMMM dd, yyyy HH:mm:ss")
+                                        </div>
+                                        <hr />
+                                        <div class="email-body" style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; padding: 10px; background-color: #f8f9fa;">
+                                            @if (!string.IsNullOrEmpty(selectedEmail.Body))
+                                            {
+                                                <pre style="white-space: pre-wrap; font-family: inherit;">@selectedEmail.Body</pre>
+                                            }
+                                            else
+                                            {
+                                                <p class="text-muted">No content available</p>
+                                            }
+                                        </div>
+                                        
+                                        @if (selectedEmail.HasAttachments)
+                                        {
+                                            <hr />
+                                            <div>
+                                                <strong>Attachments:</strong>
+                                                <p class="text-muted">
+                                                    <i class="bi bi-paperclip"></i> This email has attachments
+                                                </p>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="card">
+                                    <div class="card-body text-center text-muted">
+                                        <i class="bi bi-envelope-open" style="font-size: 3rem;"></i>
+                                        <p class="mt-2">Select an email to preview</p>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private string activeTab = "local";
+    private string localFilePath = string.Empty;
+    private string localLoadingMessage = string.Empty;
+    private string gmailLoadingMessage = string.Empty;
+    private bool isLoadingLocal = false;
+    private bool isLoadingGmail = false;
+    private bool isConnectingGmail = false;
+    private bool isSavingMbox = false;
+    private bool autoRefreshEnabled = false;
+
+    private List<EmailSummary> emails = new();
+    private EmailSummary? selectedEmail = null;
+
+    // Pagination
+    private int currentPage = 1;
+    private int pageSize = 50;
+    private int totalPages => (int)Math.Ceiling((double)emails.Count / pageSize);
+
+    // Auto-refresh timer
+    private Timer? refreshTimer;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Initialize auto-refresh timer but don't start it yet
+            refreshTimer = new Timer(AutoRefreshCallback, null, Timeout.Infinite, Timeout.Infinite);
+        }
+    }
+
+    private async void AutoRefreshCallback(object? state)
+    {
+        if (autoRefreshEnabled && GmailService.IsAuthenticated && activeTab == "gmail")
+        {
+            await InvokeAsync(async () =>
+            {
+                await RefreshGmailEmails();
+            });
+        }
+    }
+
+    private void ToggleAutoRefresh(ChangeEventArgs e)
+    {
+        autoRefreshEnabled = (bool)(e.Value ?? false);
+        
+        if (autoRefreshEnabled)
+        {
+            // Start the timer - refresh every 30 seconds
+            refreshTimer?.Change(TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+        }
+        else
+        {
+            // Stop the timer
+            refreshTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+        }
+        StateHasChanged();
+    }
+
+    private void SetActiveTab(string tab)
+    {
+        activeTab = tab;
+        StateHasChanged();
+    }
+
+    private void SetLocalTab()
+    {
+        SetActiveTab("local");
+    }
+
+    private void SetGmailTab()
+    {
+        SetActiveTab("gmail");
+    }
+
+    private async Task OnLocalFileUploaded(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            if (file != null)
+            {
+                // Create uploads directory if it doesn't exist
+                var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+                Directory.CreateDirectory(uploadsDir);
+
+                var fileName = Path.GetFileName(file.Name);
+                var filePath = Path.Combine(uploadsDir, fileName);
+
+                using var stream = File.Create(filePath);
+                await file.OpenReadStream(maxAllowedSize: long.MaxValue).CopyToAsync(stream);
+
+                localFilePath = filePath;
+                localLoadingMessage = $"File uploaded: {fileName}";
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            localLoadingMessage = $"Upload failed: {ex.Message}";
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadLocalEmails()
+    {
+        if (string.IsNullOrEmpty(localFilePath))
+        {
+            localLoadingMessage = "Please select a file first.";
+            return;
+        }
+
+        isLoadingLocal = true;
+        localLoadingMessage = "Loading emails...";
+        emails.Clear();
+        selectedEmail = null;
+        StateHasChanged();
+
+        try
+        {
+            var progress = new Progress<EmailLoadingProgress>(p =>
+            {
+                localLoadingMessage = p.Message;
+                InvokeAsync(StateHasChanged);
+            });
+
+            var emailSummaries = await EmailService.GetEmailsFromMboxAsync(localFilePath, progress);
+            emails = emailSummaries;
+            currentPage = 1;
+            localLoadingMessage = $"Loaded {emails.Count} emails successfully.";
+        }
+        catch (Exception ex)
+        {
+            localLoadingMessage = $"Error loading emails: {ex.Message}";
+        }
+        finally
+        {
+            isLoadingLocal = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ConnectGmail()
+    {
+        isConnectingGmail = true;
+        gmailLoadingMessage = "Connecting to Gmail...";
+        StateHasChanged();
+
+        try
+        {
+            var success = await GmailService.AuthenticateAsync();
+            if (success)
+            {
+                gmailLoadingMessage = "Gmail connected successfully!";
+            }
+            else
+            {
+                gmailLoadingMessage = "Failed to connect to Gmail. Please check your credentials.";
+            }
+        }
+        catch (Exception ex)
+        {
+            gmailLoadingMessage = $"Gmail connection error: {ex.Message}";
+        }
+        finally
+        {
+            isConnectingGmail = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshGmailEmails()
+    {
+        if (!GmailService.IsAuthenticated)
+        {
+            gmailLoadingMessage = "Please connect to Gmail first.";
+            return;
+        }
+
+        isLoadingGmail = true;
+        gmailLoadingMessage = "Fetching Gmail messages...";
+        emails.Clear();
+        selectedEmail = null;
+        StateHasChanged();
+
+        try
+        {
+            var gmailMessages = await GmailService.FetchMessagesAsync(100);
+            
+            // Convert Gmail messages to EmailSummary format
+            foreach (var gmailMsg in gmailMessages)
+            {
+                emails.Add(new EmailSummary
+                {
+                    From = gmailMsg.From,
+                    To = gmailMsg.To,
+                    Subject = gmailMsg.Subject,
+                    Date = gmailMsg.Date,
+                    Body = gmailMsg.Snippet,
+                    HasAttachments = false
+                });
+            }
+
+            currentPage = 1;
+            gmailLoadingMessage = $"Fetched {emails.Count} Gmail messages successfully.";
+        }
+        catch (Exception ex)
+        {
+            gmailLoadingMessage = $"Error fetching Gmail messages: {ex.Message}";
+        }
+        finally
+        {
+            isLoadingGmail = false;
+            StateHasChanged();
+        }
+    }
+
+    private void SelectEmail(EmailSummary email)
+    {
+        selectedEmail = email;
+        StateHasChanged();
+    }
+
+    private List<EmailSummary> GetPagedEmails()
+    {
+        var startIndex = (currentPage - 1) * pageSize;
+        return emails.Skip(startIndex).Take(pageSize).ToList();
+    }
+
+    private void PreviousPage()
+    {
+        if (currentPage > 1)
+        {
+            currentPage--;
+            selectedEmail = null;
+            StateHasChanged();
+        }
+    }
+
+    private void NextPage()
+    {
+        if (currentPage < totalPages)
+        {
+            currentPage++;
+            selectedEmail = null;
+            StateHasChanged();
+        }
+    }
+
+    private void GoToPage(int page)
+    {
+        currentPage = page;
+        selectedEmail = null;
+        StateHasChanged();
+    }
+
+    private async Task SaveGmailToMbox()
+    {
+        if (!emails.Any())
+        {
+            gmailLoadingMessage = "No emails to save.";
+            return;
+        }
+
+        isSavingMbox = true;
+        gmailLoadingMessage = "Saving Gmail emails to MBOX format...";
+        StateHasChanged();
+
+        try
+        {
+            // Create uploads directory if it doesn't exist
+            var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+            Directory.CreateDirectory(uploadsDir);
+
+            var fileName = $"gmail_export_{DateTime.Now:yyyyMMdd_HHmmss}.mbox";
+            var filePath = Path.Combine(uploadsDir, fileName);
+
+            // Convert Gmail messages back to MimeMessage format and save to MBOX
+            var mimeMessages = new List<MimeMessage>();
+            
+            foreach (var email in emails)
+            {
+                // Create a basic MimeMessage from EmailSummary
+                var message = new MimeMessage();
+                message.From.Add(MailboxAddress.Parse(email.From));
+                message.To.Add(MailboxAddress.Parse(email.To));
+                message.Subject = email.Subject;
+                message.Date = email.Date;
+                
+                var bodyBuilder = new BodyBuilder();
+                bodyBuilder.TextBody = email.Body;
+                message.Body = bodyBuilder.ToMessageBody();
+                
+                mimeMessages.Add(message);
+            }
+
+            // Use MboxWriter to save messages
+            var mboxWriter = new MboxToPstConverter.MboxWriter();
+            await Task.Run(() => mboxWriter.CreateMboxFromMessages(mimeMessages, filePath));
+
+            gmailLoadingMessage = $"Successfully saved {emails.Count} emails to {fileName}";
+        }
+        catch (Exception ex)
+        {
+            gmailLoadingMessage = $"Error saving emails to MBOX: {ex.Message}";
+        }
+        finally
+        {
+            isSavingMbox = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        refreshTimer?.Dispose();
+    }
+}

@@ -23,6 +23,10 @@ builder.Services.Configure<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServe
 
 // Register custom services
 builder.Services.AddScoped<EmailService>();
+builder.Services.AddScoped<GmailService>();
+
+// Add minimal authentication for Gmail OAuth
+builder.Services.AddAuthentication();
 
 var app = builder.Build();
 
