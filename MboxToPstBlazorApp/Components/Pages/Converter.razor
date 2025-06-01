@@ -1,5 +1,6 @@
 @page "/converter"
 @using MboxToPstBlazorApp.Services
+@using Microsoft.AspNetCore.Components
 @inject EmailService EmailService
 @rendermode InteractiveServer
 
@@ -89,30 +90,74 @@
         <div class="card">
             <div class="card-header">
                 <h5>Email Preview</h5>
+                @if (emails != null && emails.Count > 0)
+                {
+                    <div class="mt-2">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">🔍</span>
+                            <input type="text" class="form-control" placeholder="Search emails (subject, from, to, body)..." 
+                                   @bind="searchTerm" @oninput="OnSearchInput" />
+                            @if (!string.IsNullOrEmpty(searchTerm))
+                            {
+                                <button class="btn btn-outline-secondary" type="button" @onclick="ClearSearch">
+                                    ✕
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
             </div>
             <div class="card-body">
                 @if (emails != null && emails.Count > 0)
                 {
                     <div class="mb-3">
-                        @if (isLargeFile)
+                        @if (!string.IsNullOrEmpty(searchTerm))
                         {
-                            <small class="text-muted">Found @totalEmailCount emails (showing first @emails.Count for preview)</small>
-                            <br />
-                            <small class="text-info">ℹ️ Large file optimization: Only first @emails.Count emails loaded for preview. All @totalEmailCount emails will be converted during conversion.</small>
+                            if (filteredEmails.Count > 0)
+                            {
+                                <small class="text-muted">Found @filteredEmails.Count email(s) matching "@searchTerm"</small>
+                                @if (isLargeFile)
+                                {
+                                    <br />
+                                    <small class="text-info">ℹ️ Searching within the first @emails.Count preview emails only. @(totalEmailCount - emails.Count) additional emails available during conversion.</small>
+                                }
+                            }
+                            else
+                            {
+                                <small class="text-warning">No emails found matching "@searchTerm"</small>
+                                @if (isLargeFile)
+                                {
+                                    <br />
+                                    <small class="text-info">ℹ️ Search performed on preview emails only. More emails may be available during conversion.</small>
+                                }
+                            }
                         }
                         else
                         {
-                            <small class="text-muted">Found @emails.Count emails</small>
+                            @if (isLargeFile)
+                            {
+                                <small class="text-muted">Found @totalEmailCount emails (showing first @emails.Count for preview)</small>
+                                <br />
+                                <small class="text-info">ℹ️ Large file optimization: Only first @emails.Count emails loaded for preview. All @totalEmailCount emails will be converted during conversion.</small>
+                            }
+                            else
+                            {
+                                <small class="text-muted">Found @emails.Count emails</small>
+                            }
                         }
                     </div>
                     <div style="max-height: 400px; overflow-y: auto;">
-                        @foreach (var email in emails)
+                        @{
+                            var emailsToDisplay = !string.IsNullOrEmpty(searchTerm) ? filteredEmails : emails;
+                        }
+                        @foreach (var email in emailsToDisplay)
                         {
                             <div class="card mb-2" style="cursor: pointer;" @onclick="() => SelectEmail(email)">
                                 <div class="card-body p-2">
-                                    <h6 class="card-title mb-1">@email.Subject</h6>
+                                    <h6 class="card-title mb-1">@HighlightSearchTerm(email.Subject)</h6>
                                     <p class="card-text small mb-1">
-                                        <strong>From:</strong> @email.From<br />
+                                        <strong>From:</strong> @HighlightSearchTerm(email.From)<br />
+                                        <strong>To:</strong> @HighlightSearchTerm(email.To)<br />
                                         <strong>Date:</strong> @email.Date.ToString("yyyy-MM-dd HH:mm")
                                         @if (email.HasAttachments)
                                         {
@@ -122,7 +167,7 @@
                                 </div>
                             </div>
                         }
-                        @if (isLargeFile && totalEmailCount > emails.Count)
+                        @if (isLargeFile && totalEmailCount > emails.Count && string.IsNullOrEmpty(searchTerm))
                         {
                             <small class="text-muted">... and @(totalEmailCount - emails.Count) more emails (will be included in conversion)</small>
                         }
@@ -201,6 +246,8 @@
     private List<string> eventLog = new List<string>();
     private int totalEmailCount = 0;
     private bool isLargeFile = false;
+    private string searchTerm = "";
+    private List<EmailSummary> filteredEmails = new List<EmailSummary>();
 
     private async Task LoadEmails()
     {
@@ -221,6 +268,8 @@
         emails = null;
         totalEmailCount = 0;
         isLargeFile = false;
+        searchTerm = "";
+        filteredEmails = new List<EmailSummary>();
         eventLog.Clear();
         loadingProgress = 0;
         loadingMessage = "Preparing to load emails...";
@@ -416,5 +465,62 @@
         {
             eventLog.RemoveAt(0);
         }
+    }
+
+    private void OnSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? "";
+        FilterEmails();
+    }
+
+    private void ClearSearch()
+    {
+        searchTerm = "";
+        FilterEmails();
+    }
+
+    private void FilterEmails()
+    {
+        if (emails == null)
+        {
+            filteredEmails = new List<EmailSummary>();
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            filteredEmails = new List<EmailSummary>();
+            return;
+        }
+
+        var searchTermLower = searchTerm.ToLowerInvariant();
+        filteredEmails = emails.Where(email =>
+            (email.Subject?.ToLowerInvariant().Contains(searchTermLower) == true) ||
+            (email.From?.ToLowerInvariant().Contains(searchTermLower) == true) ||
+            (email.To?.ToLowerInvariant().Contains(searchTermLower) == true) ||
+            (email.Body?.ToLowerInvariant().Contains(searchTermLower) == true)
+        ).ToList();
+
+        StateHasChanged();
+    }
+
+    private MarkupString HighlightSearchTerm(string? text)
+    {
+        if (string.IsNullOrEmpty(text) || string.IsNullOrWhiteSpace(searchTerm))
+        {
+            return new MarkupString(System.Web.HttpUtility.HtmlEncode(text ?? ""));
+        }
+
+        var escapedText = System.Web.HttpUtility.HtmlEncode(text);
+        var escapedSearchTerm = System.Web.HttpUtility.HtmlEncode(searchTerm);
+        
+        // Case-insensitive replacement with highlighting
+        var highlightedText = System.Text.RegularExpressions.Regex.Replace(
+            escapedText,
+            System.Text.RegularExpressions.Regex.Escape(escapedSearchTerm),
+            $"<mark class=\"bg-warning\">{escapedSearchTerm}</mark>",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        return new MarkupString(highlightedText);
     }
 }
