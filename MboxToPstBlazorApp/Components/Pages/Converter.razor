@@ -94,10 +94,19 @@
                 @if (emails != null && emails.Count > 0)
                 {
                     <div class="mb-3">
-                        <small class="text-muted">Found @emails.Count emails</small>
+                        @if (isLargeFile)
+                        {
+                            <small class="text-muted">Found @totalEmailCount emails (showing first @emails.Count for preview)</small>
+                            <br />
+                            <small class="text-info">ℹ️ Large file optimization: Only first @emails.Count emails loaded for preview. All @totalEmailCount emails will be converted during conversion.</small>
+                        }
+                        else
+                        {
+                            <small class="text-muted">Found @emails.Count emails</small>
+                        }
                     </div>
                     <div style="max-height: 400px; overflow-y: auto;">
-                        @foreach (var email in emails.Take(10))
+                        @foreach (var email in emails)
                         {
                             <div class="card mb-2" style="cursor: pointer;" @onclick="() => SelectEmail(email)">
                                 <div class="card-body p-2">
@@ -113,9 +122,9 @@
                                 </div>
                             </div>
                         }
-                        @if (emails.Count > 10)
+                        @if (isLargeFile && totalEmailCount > emails.Count)
                         {
-                            <small class="text-muted">... and @(emails.Count - 10) more emails</small>
+                            <small class="text-muted">... and @(totalEmailCount - emails.Count) more emails (will be included in conversion)</small>
                         }
                     </div>
                 }
@@ -190,6 +199,8 @@
     private int loadingProgress = 0;
     private string loadingMessage = "";
     private List<string> eventLog = new List<string>();
+    private int totalEmailCount = 0;
+    private bool isLargeFile = false;
 
     private async Task LoadEmails()
     {
@@ -208,6 +219,8 @@
         isLoading = true;
         selectedEmail = null;
         emails = null;
+        totalEmailCount = 0;
+        isLargeFile = false;
         eventLog.Clear();
         loadingProgress = 0;
         loadingMessage = "Preparing to load emails...";
@@ -234,11 +247,37 @@
 
             if (extension == ".mbox")
             {
-                emails = await EmailService.GetEmailsFromMboxAsync(inputPath, progress);
+                // Check file size to decide on loading strategy
+                var fileInfo = new FileInfo(inputPath);
+                var fileSizeMB = fileInfo.Length / 1024.0 / 1024.0;
+                
+                if (fileSizeMB > 50) // For files larger than 50MB, use optimized approach
+                {
+                    isLargeFile = true;
+                    AddToEventLog($"Large file detected ({fileSizeMB:F2} MB). Using optimized loading...");
+                    
+                    var metadata = await EmailService.GetEmailMetadataFromMboxAsync(inputPath, progress);
+                    emails = metadata.PreviewEmails;
+                    totalEmailCount = metadata.TotalEmailCount;
+                    
+                    SetStatusMessage($"Successfully loaded metadata for {totalEmailCount} emails. Showing first {emails.Count} for preview.", "alert-success");
+                    AddToEventLog($"Optimized loading completed. Total emails: {totalEmailCount}, Preview: {emails.Count}");
+                }
+                else
+                {
+                    // For smaller files, load all emails as before
+                    emails = await EmailService.GetEmailsFromMboxAsync(inputPath, progress);
+                    totalEmailCount = emails.Count;
+                    SetStatusMessage($"Successfully loaded {emails.Count} emails.", "alert-success");
+                    AddToEventLog($"Standard loading completed. Total emails: {emails.Count}");
+                }
             }
             else if (extension == ".pst")
             {
                 emails = await EmailService.GetEmailsFromPstAsync(inputPath);
+                totalEmailCount = emails.Count;
+                SetStatusMessage($"Successfully loaded {emails.Count} emails.", "alert-success");
+                AddToEventLog($"PST loading completed. Total emails: {emails.Count}");
             }
             else
             {
@@ -248,14 +287,13 @@
 
             loadingProgress = 100;
             loadingMessage = "Loading completed!";
-            SetStatusMessage($"Successfully loaded {emails.Count} emails.", "alert-success");
-            AddToEventLog($"Email loading completed successfully. Total emails: {emails.Count}");
         }
         catch (Exception ex)
         {
             SetStatusMessage($"Error loading emails: {ex.Message}", "alert-danger");
             AddToEventLog($"Error loading emails: {ex.Message}");
             emails = null;
+            totalEmailCount = 0;
         }
         finally
         {
