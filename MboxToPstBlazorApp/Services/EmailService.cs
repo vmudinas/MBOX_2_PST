@@ -102,8 +102,8 @@ namespace MboxToPstBlazorApp.Services
                 // Count total emails
                 var totalCount = await _mboxParser.CountMboxMessagesAsync(filePath, mboxProgress);
                 
-                // Get first 20 emails for preview
-                var previewMessages = await _mboxParser.GetFirstMboxMessagesAsync(filePath, 20, mboxProgress);
+                // Get first 200 emails for preview
+                var previewMessages = await _mboxParser.GetFirstMboxMessagesAsync(filePath, 200, mboxProgress);
                 
                 var previewEmails = previewMessages.Select(message => new EmailSummary
                 {
@@ -151,8 +151,8 @@ namespace MboxToPstBlazorApp.Services
                 // Count total emails
                 var totalCount = await _pstReader.CountPstMessagesAsync(filePath, pstProgress);
                 
-                // Get first 20 emails for preview
-                var previewMessages = await _pstReader.GetFirstPstMessagesAsync(filePath, 20, pstProgress);
+                // Get first 200 emails for preview
+                var previewMessages = await _pstReader.GetFirstPstMessagesAsync(filePath, 200, pstProgress);
                 
                 var previewEmails = previewMessages.Select(message => new EmailSummary
                 {
