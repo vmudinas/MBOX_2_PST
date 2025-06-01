@@ -161,6 +161,9 @@ If no messages are being processed:
 - Interactive file selection for input and output paths
 - Real-time conversion progress display
 - Email list browsing and content preview
+- **Large file support**: Upload files up to 50GB with streaming technology
+- **Progress tracking**: Real-time upload progress with chunked streaming
+- **Download functionality**: Secure download links for converted files
 
 ### Requirements
 
@@ -174,6 +177,17 @@ dotnet run
 ```
 
 Then open https://localhost:5001 (or the URL shown in the console) in your web browser.
+
+### Large File Support
+
+The Blazor web application supports uploading large email files (up to 50GB) using:
+
+- **Streaming upload**: Files are uploaded in 1MB chunks to prevent memory issues
+- **Progress tracking**: Real-time progress updates during upload
+- **Server configuration**: Optimized server settings for large file handling
+- **Download functionality**: Secure download links for converted files
+
+This makes it suitable for processing very large MBOX or PST files that were previously limited to 10GB.
 
 ### Building
 
