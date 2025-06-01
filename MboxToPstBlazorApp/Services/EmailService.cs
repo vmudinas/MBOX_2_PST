@@ -130,6 +130,55 @@ namespace MboxToPstBlazorApp.Services
             });
         }
 
+        public async Task<EmailMetadata> GetEmailMetadataFromPstAsync(string filePath, IProgress<EmailLoadingProgress>? progress = null)
+        {
+            if (!File.Exists(filePath))
+                throw new FileNotFoundException($"PST file not found: {filePath}");
+
+            return await Task.Run(async () =>
+            {
+                var pstProgress = new Progress<PstParsingProgress>(p =>
+                {
+                    progress?.Report(new EmailLoadingProgress 
+                    { 
+                        Message = p.Message, 
+                        EmailCount = p.MessageCount,
+                        IsCompleted = p.IsCompleted,
+                        FileSizeMB = p.FileSizeMB
+                    });
+                });
+                
+                // Count total emails
+                var totalCount = await _pstReader.CountPstMessagesAsync(filePath, pstProgress);
+                
+                // Get first 20 emails for preview
+                var previewMessages = await _pstReader.GetFirstPstMessagesAsync(filePath, 20, pstProgress);
+                
+                var previewEmails = previewMessages.Select(message => new EmailSummary
+                {
+                    Subject = message.Subject ?? "(No Subject)",
+                    From = message.From?.ToString() ?? "Unknown",
+                    To = message.To?.ToString() ?? "",
+                    Date = message.Date.DateTime,
+                    HasAttachments = message.Attachments.Any(),
+                    Body = message.TextBody ?? message.HtmlBody ?? "(No content)"
+                }).ToList();
+
+                progress?.Report(new EmailLoadingProgress 
+                { 
+                    Message = $"Successfully loaded metadata for {totalCount} emails (showing first {previewEmails.Count} for preview)", 
+                    EmailCount = totalCount,
+                    IsCompleted = true
+                });
+
+                return new EmailMetadata
+                {
+                    TotalEmailCount = totalCount,
+                    PreviewEmails = previewEmails
+                };
+            });
+        }
+
         public Task<List<EmailSummary>> GetEmailsFromPstAsync(string filePath)
         {
             if (!File.Exists(filePath))

@@ -274,10 +274,30 @@
             }
             else if (extension == ".pst")
             {
-                emails = await EmailService.GetEmailsFromPstAsync(inputPath);
-                totalEmailCount = emails.Count;
-                SetStatusMessage($"Successfully loaded {emails.Count} emails.", "alert-success");
-                AddToEventLog($"PST loading completed. Total emails: {emails.Count}");
+                // Check file size to decide on loading strategy
+                var fileInfo = new FileInfo(inputPath);
+                var fileSizeMB = fileInfo.Length / 1024.0 / 1024.0;
+                
+                if (fileSizeMB > 50) // For files larger than 50MB, use optimized approach
+                {
+                    isLargeFile = true;
+                    AddToEventLog($"Large PST file detected ({fileSizeMB:F2} MB). Using optimized loading...");
+                    
+                    var metadata = await EmailService.GetEmailMetadataFromPstAsync(inputPath, progress);
+                    emails = metadata.PreviewEmails;
+                    totalEmailCount = metadata.TotalEmailCount;
+                    
+                    SetStatusMessage($"Successfully loaded metadata for {totalEmailCount} emails. Showing first {emails.Count} for preview.", "alert-success");
+                    AddToEventLog($"Optimized PST loading completed. Total emails: {totalEmailCount}, Preview: {emails.Count}");
+                }
+                else
+                {
+                    // For smaller PST files, load all emails as before
+                    emails = await EmailService.GetEmailsFromPstAsync(inputPath);
+                    totalEmailCount = emails.Count;
+                    SetStatusMessage($"Successfully loaded {emails.Count} emails.", "alert-success");
+                    AddToEventLog($"Standard PST loading completed. Total emails: {emails.Count}");
+                }
             }
             else
             {
