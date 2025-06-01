@@ -1,0 +1,283 @@
+@page "/converter"
+@using MboxToPstBlazorApp.Services
+@inject EmailService EmailService
+@rendermode InteractiveServer
+
+<PageTitle>Email Converter</PageTitle>
+
+<h1>Email Format Converter</h1>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Conversion Settings</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="inputPath" class="form-label">Input File Path:</label>
+                    <input type="text" class="form-control" id="inputPath" @bind="inputPath" placeholder="Enter path to MBOX or PST file" />
+                    <small class="form-text text-muted">Supported formats: .mbox, .pst</small>
+                </div>
+
+                <div class="mb-3">
+                    <label for="outputPath" class="form-label">Output File Path:</label>
+                    <input type="text" class="form-control" id="outputPath" @bind="outputPath" placeholder="Enter path for converted file" />
+                    <small class="form-text text-muted">File extension determines conversion direction</small>
+                </div>
+
+                <div class="mb-3">
+                    <button class="btn btn-primary me-2" @onclick="StartConversion" disabled="@isConverting">
+                        @if (isConverting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            <text>Converting...</text>
+                        }
+                        else
+                        {
+                            <text>Convert</text>
+                        }
+                    </button>
+                    <button class="btn btn-secondary" @onclick="LoadEmails" disabled="@isLoading">
+                        @if (isLoading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            <text>Loading...</text>
+                        }
+                        else
+                        {
+                            <text>Load Emails</text>
+                        }
+                    </button>
+                </div>
+
+                @if (!string.IsNullOrEmpty(statusMessage))
+                {
+                    <div class="alert @statusAlertClass">
+                        @statusMessage
+                    </div>
+                }
+
+                @if (isConverting)
+                {
+                    <div class="mb-3">
+                        <div class="progress">
+                            <div class="progress-bar" role="progressbar" style="width: @(conversionProgress)%" aria-valuenow="@conversionProgress" aria-valuemin="0" aria-valuemax="100">
+                                @conversionProgress%
+                            </div>
+                        </div>
+                        <small class="text-muted">@progressMessage</small>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Email Preview</h5>
+            </div>
+            <div class="card-body">
+                @if (emails != null && emails.Count > 0)
+                {
+                    <div class="mb-3">
+                        <small class="text-muted">Found @emails.Count emails</small>
+                    </div>
+                    <div style="max-height: 400px; overflow-y: auto;">
+                        @foreach (var email in emails.Take(10))
+                        {
+                            <div class="card mb-2" style="cursor: pointer;" @onclick="() => SelectEmail(email)">
+                                <div class="card-body p-2">
+                                    <h6 class="card-title mb-1">@email.Subject</h6>
+                                    <p class="card-text small mb-1">
+                                        <strong>From:</strong> @email.From<br />
+                                        <strong>Date:</strong> @email.Date.ToString("yyyy-MM-dd HH:mm")
+                                        @if (email.HasAttachments)
+                                        {
+                                            <span class="badge bg-secondary ms-2">📎</span>
+                                        }
+                                    </p>
+                                </div>
+                            </div>
+                        }
+                        @if (emails.Count > 10)
+                        {
+                            <small class="text-muted">... and @(emails.Count - 10) more emails</small>
+                        }
+                    </div>
+                }
+                else if (!string.IsNullOrEmpty(inputPath))
+                {
+                    <p class="text-muted">Click "Load Emails" to preview emails from the selected file.</p>
+                }
+                else
+                {
+                    <p class="text-muted">Enter a file path to preview emails.</p>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (selectedEmail != null)
+{
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Selected Email Details</h5>
+                </div>
+                <div class="card-body">
+                    <h6>@selectedEmail.Subject</h6>
+                    <p><strong>From:</strong> @selectedEmail.From</p>
+                    <p><strong>To:</strong> @selectedEmail.To</p>
+                    <p><strong>Date:</strong> @selectedEmail.Date.ToString("yyyy-MM-dd HH:mm:ss")</p>
+                    <hr />
+                    <div style="max-height: 300px; overflow-y: auto; background-color: #f8f9fa; padding: 10px; border-radius: 5px;">
+                        <pre style="white-space: pre-wrap;">@selectedEmail.Body</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private string inputPath = "";
+    private string outputPath = "";
+    private List<EmailSummary>? emails;
+    private EmailSummary? selectedEmail;
+    private bool isLoading = false;
+    private bool isConverting = false;
+    private string statusMessage = "";
+    private string statusAlertClass = "";
+    private int conversionProgress = 0;
+    private string progressMessage = "";
+
+    private async Task LoadEmails()
+    {
+        if (string.IsNullOrWhiteSpace(inputPath))
+        {
+            SetStatusMessage("Please enter an input file path.", "alert-warning");
+            return;
+        }
+
+        if (!File.Exists(inputPath))
+        {
+            SetStatusMessage("Input file not found.", "alert-danger");
+            return;
+        }
+
+        isLoading = true;
+        selectedEmail = null;
+        emails = null;
+
+        try
+        {
+            var extension = Path.GetExtension(inputPath).ToLowerInvariant();
+
+            if (extension == ".mbox")
+            {
+                emails = await EmailService.GetEmailsFromMboxAsync(inputPath);
+            }
+            else if (extension == ".pst")
+            {
+                emails = await EmailService.GetEmailsFromPstAsync(inputPath);
+            }
+            else
+            {
+                SetStatusMessage("Unsupported file format. Please use .mbox or .pst files.", "alert-warning");
+                return;
+            }
+
+            SetStatusMessage($"Successfully loaded {emails.Count} emails.", "alert-success");
+        }
+        catch (Exception ex)
+        {
+            SetStatusMessage($"Error loading emails: {ex.Message}", "alert-danger");
+            emails = null;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task StartConversion()
+    {
+        if (string.IsNullOrWhiteSpace(inputPath) || string.IsNullOrWhiteSpace(outputPath))
+        {
+            SetStatusMessage("Please enter both input and output file paths.", "alert-warning");
+            return;
+        }
+
+        if (!File.Exists(inputPath))
+        {
+            SetStatusMessage("Input file not found.", "alert-danger");
+            return;
+        }
+
+        var inputExt = Path.GetExtension(inputPath).ToLowerInvariant();
+        var outputExt = Path.GetExtension(outputPath).ToLowerInvariant();
+
+        if (!((inputExt == ".mbox" && outputExt == ".pst") || (inputExt == ".pst" && outputExt == ".mbox")))
+        {
+            SetStatusMessage("Unsupported conversion. Supported: .mbox to .pst or .pst to .mbox", "alert-warning");
+            return;
+        }
+
+        isConverting = true;
+        conversionProgress = 0;
+        progressMessage = "Preparing conversion...";
+
+        var progress = new Progress<ConversionProgress>(p =>
+        {
+            conversionProgress = p.ProgressPercentage;
+            progressMessage = p.Message;
+            InvokeAsync(StateHasChanged);
+        });
+
+        try
+        {
+            ConversionResult result;
+
+            if (inputExt == ".mbox" && outputExt == ".pst")
+            {
+                result = await EmailService.ConvertMboxToPstAsync(inputPath, outputPath, progress);
+            }
+            else
+            {
+                result = await EmailService.ConvertPstToMboxAsync(inputPath, outputPath, progress);
+            }
+
+            if (result.Success)
+            {
+                SetStatusMessage(result.Message, "alert-success");
+            }
+            else
+            {
+                SetStatusMessage($"Conversion failed: {result.Message}", "alert-danger");
+            }
+        }
+        catch (Exception ex)
+        {
+            SetStatusMessage($"Conversion error: {ex.Message}", "alert-danger");
+        }
+        finally
+        {
+            isConverting = false;
+        }
+    }
+
+    private void SelectEmail(EmailSummary email)
+    {
+        selectedEmail = email;
+    }
+
+    private void SetStatusMessage(string message, string alertClass)
+    {
+        statusMessage = message;
+        statusAlertClass = alertClass;
+    }
+}
