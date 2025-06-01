@@ -42,34 +42,55 @@ public class MboxParser
         var parser = new MimeParser(stream, MimeFormat.Mbox);
 
         int messageCount = 0;
+        var messages = new List<MimeMessage>();
+        int skippedCount = 0;
+        
         while (!parser.IsEndOfStream)
         {
-            var message = parser.ParseMessage();
-            if (message != null)
+            try
             {
-                messageCount++;
-                if (messageCount % 50 == 0)
+                var message = parser.ParseMessage();
+                if (message != null)
                 {
-                    Console.WriteLine($"Parsed {messageCount} messages...");
-                    progress?.Report(new MboxParsingProgress 
-                    { 
-                        Message = $"Parsed {messageCount} messages...", 
-                        MessageCount = messageCount,
-                        FileSizeMB = fileSizeInMB
-                    });
+                    messages.Add(message);
+                    messageCount++;
+                    if (messageCount % 50 == 0)
+                    {
+                        Console.WriteLine($"Parsed {messageCount} messages...");
+                        progress?.Report(new MboxParsingProgress 
+                        { 
+                            Message = $"Parsed {messageCount} messages...", 
+                            MessageCount = messageCount,
+                            FileSizeMB = fileSizeInMB
+                        });
+                    }
                 }
-                yield return message;
+            }
+            catch (Exception ex)
+            {
+                skippedCount++;
+                // Log malformed message with index and error details
+                Console.WriteLine($"Skipped malformed message at index {messageCount + skippedCount}: {ex.Message}");
+                
+                // Continue parsing - MimeParser should handle recovery automatically
             }
         }
         
-        Console.WriteLine($"Finished parsing MBOX file. Total messages found: {messageCount}");
+        // Report final results including skipped messages
+        Console.WriteLine($"Finished parsing MBOX file. Total messages found: {messageCount}, Skipped: {skippedCount}");
         progress?.Report(new MboxParsingProgress 
         { 
-            Message = $"Finished parsing MBOX file. Total messages found: {messageCount}", 
+            Message = $"Finished parsing MBOX file. Total messages found: {messageCount}, Skipped: {skippedCount}", 
             MessageCount = messageCount,
             FileSizeMB = fileSizeInMB,
             IsCompleted = true
         });
+        
+        // Now yield all successfully parsed messages
+        foreach (var message in messages)
+        {
+            yield return message;
+        }
     }
 
     public async Task<int> CountMboxMessagesAsync(string mboxFilePath, IProgress<MboxParsingProgress>? progress = null)
@@ -95,27 +116,40 @@ public class MboxParser
             var parser = new MimeParser(stream, MimeFormat.Mbox);
 
             int messageCount = 0;
+            int skippedCount = 0;
+            
             while (!parser.IsEndOfStream)
             {
-                var message = parser.ParseMessage();
-                if (message != null)
+                try
                 {
-                    messageCount++;
-                    if (messageCount % 100 == 0)
+                    var message = parser.ParseMessage();
+                    if (message != null)
                     {
-                        progress?.Report(new MboxParsingProgress 
-                        { 
-                            Message = $"Counted {messageCount} messages...", 
-                            MessageCount = messageCount,
-                            FileSizeMB = fileSizeInMB
-                        });
+                        messageCount++;
+                        if (messageCount % 100 == 0)
+                        {
+                            progress?.Report(new MboxParsingProgress 
+                            { 
+                                Message = $"Counted {messageCount} messages...", 
+                                MessageCount = messageCount,
+                                FileSizeMB = fileSizeInMB
+                            });
+                        }
                     }
+                }
+                catch (Exception ex)
+                {
+                    skippedCount++;
+                    // Log malformed message during counting
+                    Console.WriteLine($"Skipped malformed message during count at index {messageCount + skippedCount}: {ex.Message}");
+                    
+                    // Continue counting - MimeParser should handle recovery automatically
                 }
             }
             
             progress?.Report(new MboxParsingProgress 
             { 
-                Message = $"Finished counting. Total messages: {messageCount}", 
+                Message = $"Finished counting. Total messages: {messageCount}, Skipped: {skippedCount}", 
                 MessageCount = messageCount,
                 FileSizeMB = fileSizeInMB,
                 IsCompleted = true
@@ -149,29 +183,43 @@ public class MboxParser
             var parser = new MimeParser(stream, MimeFormat.Mbox);
 
             int messageCount = 0;
+            int skippedCount = 0;
+            
             while (!parser.IsEndOfStream && messages.Count < maxCount)
             {
-                var message = parser.ParseMessage();
-                if (message != null)
+                try
                 {
-                    messages.Add(message);
-                    messageCount++;
-                    
-                    if (messageCount % 10 == 0)
+                    var message = parser.ParseMessage();
+                    if (message != null)
                     {
-                        progress?.Report(new MboxParsingProgress 
-                        { 
-                            Message = $"Loaded {messageCount} messages for preview...", 
-                            MessageCount = messageCount,
-                            FileSizeMB = fileSizeInMB
-                        });
+                        messages.Add(message);
+                        messageCount++;
+                        
+                        if (messageCount % 10 == 0)
+                        {
+                            progress?.Report(new MboxParsingProgress 
+                            { 
+                                Message = $"Loaded {messageCount} messages for preview...", 
+                                MessageCount = messageCount,
+                                FileSizeMB = fileSizeInMB
+                            });
+                        }
                     }
+                }
+                catch (Exception ex)
+                {
+                    skippedCount++;
+                    // Log malformed message during preview loading
+                    Console.WriteLine($"Skipped malformed message during preview at index {messageCount + skippedCount}: {ex.Message}");
+                    
+                    // Continue trying to load more messages for preview
+                    // MimeParser should handle recovery automatically
                 }
             }
             
             progress?.Report(new MboxParsingProgress 
             { 
-                Message = $"Loaded {messages.Count} messages for preview", 
+                Message = $"Loaded {messages.Count} messages for preview (skipped {skippedCount})", 
                 MessageCount = messages.Count,
                 FileSizeMB = fileSizeInMB,
                 IsCompleted = true
