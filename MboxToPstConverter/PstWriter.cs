@@ -10,7 +10,13 @@ public class PstWriter
 {
     public void CreatePstFromMessages(IEnumerable<MimeMessage> messages, string pstFilePath)
     {
+        CreatePstFromMessages(messages, pstFilePath, null);
+    }
+
+    public void CreatePstFromMessages(IEnumerable<MimeMessage> messages, string pstFilePath, IProgress<PstConversionProgress>? progress)
+    {
         Console.WriteLine("Creating PST file...");
+        progress?.Report(new PstConversionProgress { Message = "Creating PST file...", ProcessedCount = 0, SuccessfulCount = 0, FailedCount = 0 });
         
         // Create a new PST file
         var pst = PersonalStorage.Create(pstFilePath, FileFormatVersion.Unicode);
@@ -22,6 +28,7 @@ public class PstWriter
             var inboxFolder = rootFolder.AddSubFolder("Inbox");
             
             Console.WriteLine("PST file created. Processing messages...");
+            progress?.Report(new PstConversionProgress { Message = "PST file created. Processing messages...", ProcessedCount = 0, SuccessfulCount = 0, FailedCount = 0 });
 
             int processedCount = 0;
             int successCount = 0;
@@ -43,7 +50,15 @@ public class PstWriter
                     // Show progress every 10 messages
                     if (processedCount % 10 == 0)
                     {
-                        Console.WriteLine($"Processed {processedCount} messages ({successCount} successful, {errorCount} failed)");
+                        var progressMessage = $"Processed {processedCount} messages ({successCount} successful, {errorCount} failed)";
+                        Console.WriteLine(progressMessage);
+                        progress?.Report(new PstConversionProgress 
+                        { 
+                            Message = progressMessage, 
+                            ProcessedCount = processedCount, 
+                            SuccessfulCount = successCount, 
+                            FailedCount = errorCount 
+                        });
                     }
                 }
                 catch (Exception ex)
@@ -58,11 +73,29 @@ public class PstWriter
                 }
             }
             
-            Console.WriteLine($"Conversion completed: {successCount} messages successfully added to PST file, {errorCount} messages failed.");
+            var finalMessage = $"Conversion completed: {successCount} messages successfully added to PST file, {errorCount} messages failed.";
+            Console.WriteLine(finalMessage);
+            progress?.Report(new PstConversionProgress 
+            { 
+                Message = finalMessage, 
+                ProcessedCount = processedCount, 
+                SuccessfulCount = successCount, 
+                FailedCount = errorCount,
+                IsCompleted = true
+            });
             
             if (errorCount > 0)
             {
-                Console.WriteLine($"Note: {errorCount} messages failed due to invalid email addresses or other formatting issues. This is normal when processing MBOX files with malformed data.");
+                var noteMessage = $"Note: {errorCount} messages failed due to invalid email addresses or other formatting issues. This is normal when processing MBOX files with malformed data.";
+                Console.WriteLine(noteMessage);
+                progress?.Report(new PstConversionProgress 
+                { 
+                    Message = noteMessage, 
+                    ProcessedCount = processedCount, 
+                    SuccessfulCount = successCount, 
+                    FailedCount = errorCount,
+                    IsCompleted = true
+                });
             }
         }
         finally
@@ -195,4 +228,13 @@ public class PstWriter
 
         return string.Empty;
     }
+}
+
+public class PstConversionProgress
+{
+    public string Message { get; set; } = string.Empty;
+    public int ProcessedCount { get; set; }
+    public int SuccessfulCount { get; set; }
+    public int FailedCount { get; set; }
+    public bool IsCompleted { get; set; }
 }
