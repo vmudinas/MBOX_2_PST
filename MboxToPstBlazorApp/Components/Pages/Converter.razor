@@ -16,15 +16,25 @@
             </div>
             <div class="card-body">
                 <div class="mb-3">
-                    <label for="inputPath" class="form-label">Input File Path:</label>
-                    <input type="text" class="form-control" id="inputPath" @bind="inputPath" placeholder="Enter path to MBOX or PST file" />
-                    <small class="form-text text-muted">Supported formats: .mbox, .pst</small>
+                    <label for="inputPath" class="form-label">Input File:</label>
+                    <div class="row">
+                        <div class="col-md-8">
+                            <input type="text" class="form-control" id="inputPath" @bind="inputPath" placeholder="Enter path to MBOX or PST file (e.g., /path/to/file.mbox)" />
+                        </div>
+                        <div class="col-md-4">
+                            <div class="d-grid">
+                                <label class="btn btn-outline-primary" for="inputFileUpload">Upload File</label>
+                            </div>
+                        </div>
+                    </div>
+                    <InputFile id="inputFileUpload" class="d-none" OnChange="OnInputFileUploaded" accept=".mbox,.pst" />
+                    <small class="form-text text-muted">Supported formats: .mbox, .pst. Enter a file path or upload a file.</small>
                 </div>
 
                 <div class="mb-3">
                     <label for="outputPath" class="form-label">Output File Path:</label>
-                    <input type="text" class="form-control" id="outputPath" @bind="outputPath" placeholder="Enter path for converted file" />
-                    <small class="form-text text-muted">File extension determines conversion direction</small>
+                    <input type="text" class="form-control" id="outputPath" @bind="outputPath" placeholder="Enter path for converted file (e.g., /path/to/converted.pst)" />
+                    <small class="form-text text-muted">File extension determines conversion direction (.mbox → .pst or .pst → .mbox). Ensure the directory exists and is writable.</small>
                 </div>
 
                 <div class="mb-3">
@@ -522,5 +532,40 @@
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
         return new MarkupString(highlightedText);
+    }
+
+    private async Task OnInputFileUploaded(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file != null)
+        {
+            try
+            {
+                SetStatusMessage($"Uploading {file.Name}...", "alert-info");
+                AddToEventLog($"Starting upload of {file.Name} ({file.Size / 1024.0 / 1024.0:F2} MB)");
+                
+                // Create uploads directory if it doesn't exist
+                var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+                Directory.CreateDirectory(uploadsDir);
+                
+                // Create file path
+                var fileName = Path.GetFileName(file.Name);
+                var filePath = Path.Combine(uploadsDir, fileName);
+                
+                // Save uploaded file
+                using var stream = file.OpenReadStream(maxAllowedSize: 10L * 1024 * 1024 * 1024); // 10GB max
+                using var fileStream = new FileStream(filePath, FileMode.Create);
+                await stream.CopyToAsync(fileStream);
+                
+                inputPath = filePath;
+                SetStatusMessage($"Successfully uploaded {file.Name}. File saved to: {filePath}", "alert-success");
+                AddToEventLog($"Upload completed: {filePath}");
+            }
+            catch (Exception ex)
+            {
+                SetStatusMessage($"Upload failed: {ex.Message}", "alert-danger");
+                AddToEventLog($"Upload failed: {ex.Message}");
+            }
+        }
     }
 }
