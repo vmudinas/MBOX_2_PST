@@ -49,7 +49,7 @@
                             <text>Convert</text>
                         }
                     </button>
-                    <button class="btn btn-secondary" @onclick="LoadEmails" disabled="@isLoading">
+                    <button class="btn btn-secondary me-2" @onclick="LoadEmails" disabled="@isLoading">
                         @if (isLoading)
                         {
                             <span class="spinner-border spinner-border-sm me-2"></span>
@@ -60,6 +60,12 @@
                             <text>Load Emails</text>
                         }
                     </button>
+                    @if (hasConvertedFile && !string.IsNullOrEmpty(convertedFilePath))
+                    {
+                        <a class="btn btn-success" href="/download?file=@Uri.EscapeDataString(convertedFilePath)" target="_blank">
+                            <i class="fas fa-download"></i> Download Converted File
+                        </a>
+                    }
                 </div>
 
                 @if (!string.IsNullOrEmpty(statusMessage))
@@ -90,6 +96,18 @@
                             </div>
                         </div>
                         <small class="text-muted">@loadingMessage</small>
+                    </div>
+                }
+
+                @if (isUploading)
+                {
+                    <div class="mb-3">
+                        <div class="progress">
+                            <div class="progress-bar bg-warning" role="progressbar" style="width: @(uploadProgress)%" aria-valuenow="@uploadProgress" aria-valuemin="0" aria-valuemax="100">
+                                @uploadProgress%
+                            </div>
+                        </div>
+                        <small class="text-muted">Uploading file...</small>
                     </div>
                 }
             </div>
@@ -258,6 +276,10 @@
     private bool isLargeFile = false;
     private string searchTerm = "";
     private List<EmailSummary> filteredEmails = new List<EmailSummary>();
+    private bool hasConvertedFile = false;
+    private string? convertedFilePath = null;
+    private bool isUploading = false;
+    private int uploadProgress = 0;
 
     private async Task LoadEmails()
     {
@@ -436,6 +458,13 @@
             {
                 SetStatusMessage(result.Message, "alert-success");
                 AddToEventLog($"Conversion completed successfully: {result.Message}");
+                
+                // Track converted file for download
+                if (File.Exists(outputPath))
+                {
+                    hasConvertedFile = true;
+                    convertedFilePath = outputPath;
+                }
             }
             else
             {
@@ -541,6 +570,8 @@
         {
             try
             {
+                isUploading = true;
+                uploadProgress = 0;
                 SetStatusMessage($"Uploading {file.Name}...", "alert-info");
                 AddToEventLog($"Starting upload of {file.Name} ({file.Size / 1024.0 / 1024.0:F2} MB)");
                 
@@ -552,10 +583,8 @@
                 var fileName = Path.GetFileName(file.Name);
                 var filePath = Path.Combine(uploadsDir, fileName);
                 
-                // Save uploaded file
-                using var stream = file.OpenReadStream(maxAllowedSize: 10L * 1024 * 1024 * 1024); // 10GB max
-                using var fileStream = new FileStream(filePath, FileMode.Create);
-                await stream.CopyToAsync(fileStream);
+                // Save uploaded file with streaming for large files
+                await SaveFileWithStreaming(file, filePath);
                 
                 inputPath = filePath;
                 SetStatusMessage($"Successfully uploaded {file.Name}. File saved to: {filePath}", "alert-success");
@@ -566,6 +595,48 @@
                 SetStatusMessage($"Upload failed: {ex.Message}", "alert-danger");
                 AddToEventLog($"Upload failed: {ex.Message}");
             }
+            finally
+            {
+                isUploading = false;
+                uploadProgress = 0;
+            }
         }
+    }
+
+    private async Task SaveFileWithStreaming(IBrowserFile file, string filePath)
+    {
+        const int bufferSize = 1024 * 1024; // 1MB buffer
+        var totalBytes = file.Size;
+        var bytesRead = 0L;
+        var lastProgress = 0;
+
+        using var stream = file.OpenReadStream(maxAllowedSize: 50L * 1024 * 1024 * 1024); // 50GB max
+        using var fileStream = new FileStream(filePath, FileMode.Create);
+        
+        var buffer = new byte[bufferSize];
+        int currentBytesRead;
+        
+        while ((currentBytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+        {
+            await fileStream.WriteAsync(buffer, 0, currentBytesRead);
+            bytesRead += currentBytesRead;
+            
+            // Update progress every ~2%
+            var currentProgress = (int)((bytesRead * 100) / totalBytes);
+            if (currentProgress >= lastProgress + 2)
+            {
+                lastProgress = currentProgress;
+                uploadProgress = currentProgress;
+                SetStatusMessage($"Uploading {file.Name}... {currentProgress}%", "alert-info");
+                AddToEventLog($"Upload progress: {bytesRead / 1024.0 / 1024.0:F2} MB / {totalBytes / 1024.0 / 1024.0:F2} MB ({currentProgress}%)");
+                await InvokeAsync(StateHasChanged);
+                
+                // Small delay to prevent UI freezing
+                await Task.Delay(10);
+            }
+        }
+        
+        uploadProgress = 100;
+        await InvokeAsync(StateHasChanged);
     }
 }
