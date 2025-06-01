@@ -17,6 +17,11 @@ public class Converter
 
     public void ConvertMboxToPst(string mboxFilePath, string pstFilePath)
     {
+        ConvertMboxToPst(mboxFilePath, pstFilePath, null, null);
+    }
+
+    public void ConvertMboxToPst(string mboxFilePath, string pstFilePath, IProgress<MboxParsingProgress>? parsingProgress, IProgress<PstConversionProgress>? conversionProgress)
+    {
         Console.WriteLine($"Starting conversion from {Path.GetFileName(mboxFilePath)} to {Path.GetFileName(pstFilePath)}");
         Console.WriteLine($"Input: {mboxFilePath}");
         Console.WriteLine($"Output: {pstFilePath}");
@@ -25,12 +30,12 @@ public class Converter
         try
         {
             // Parse MBOX file and get messages
-            var messages = _mboxParser.ParseMboxFile(mboxFilePath);
+            var messages = _mboxParser.ParseMboxFile(mboxFilePath, parsingProgress);
             
             Console.WriteLine();
             
             // Create PST file from messages
-            _pstWriter.CreatePstFromMessages(messages, pstFilePath);
+            _pstWriter.CreatePstFromMessages(messages, pstFilePath, conversionProgress);
             
             Console.WriteLine();
             Console.WriteLine("Conversion completed successfully!");

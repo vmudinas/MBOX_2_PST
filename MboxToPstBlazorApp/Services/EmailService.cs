@@ -21,26 +21,64 @@ namespace MboxToPstBlazorApp.Services
 
         public Task<List<EmailSummary>> GetEmailsFromMboxAsync(string filePath)
         {
+            return GetEmailsFromMboxAsync(filePath, null);
+        }
+
+        public async Task<List<EmailSummary>> GetEmailsFromMboxAsync(string filePath, IProgress<EmailLoadingProgress>? progress)
+        {
             if (!File.Exists(filePath))
                 throw new FileNotFoundException($"MBOX file not found: {filePath}");
 
-            var emails = new List<EmailSummary>();
-            var messages = _mboxParser.ParseMboxFile(filePath);
-            
-            foreach (var message in messages)
+            return await Task.Run(() =>
             {
-                emails.Add(new EmailSummary
+                var emails = new List<EmailSummary>();
+                
+                var mboxProgress = new Progress<MboxParsingProgress>(p =>
                 {
-                    Subject = message.Subject ?? "(No Subject)",
-                    From = message.From?.ToString() ?? "Unknown",
-                    To = message.To?.ToString() ?? "",
-                    Date = message.Date.DateTime,
-                    HasAttachments = message.Attachments.Any(),
-                    Body = message.TextBody ?? message.HtmlBody ?? "(No content)"
+                    progress?.Report(new EmailLoadingProgress 
+                    { 
+                        Message = p.Message, 
+                        EmailCount = p.MessageCount,
+                        IsCompleted = p.IsCompleted,
+                        FileSizeMB = p.FileSizeMB
+                    });
                 });
-            }
+                
+                var messages = _mboxParser.ParseMboxFile(filePath, mboxProgress);
+                
+                int processedCount = 0;
+                foreach (var message in messages)
+                {
+                    emails.Add(new EmailSummary
+                    {
+                        Subject = message.Subject ?? "(No Subject)",
+                        From = message.From?.ToString() ?? "Unknown",
+                        To = message.To?.ToString() ?? "",
+                        Date = message.Date.DateTime,
+                        HasAttachments = message.Attachments.Any(),
+                        Body = message.TextBody ?? message.HtmlBody ?? "(No content)"
+                    });
+                    
+                    processedCount++;
+                    if (processedCount % 100 == 0)
+                    {
+                        progress?.Report(new EmailLoadingProgress 
+                        { 
+                            Message = $"Processed {processedCount} emails into summary format...", 
+                            EmailCount = processedCount
+                        });
+                    }
+                }
 
-            return Task.FromResult(emails);
+                progress?.Report(new EmailLoadingProgress 
+                { 
+                    Message = $"Successfully loaded {emails.Count} emails", 
+                    EmailCount = emails.Count,
+                    IsCompleted = true
+                });
+
+                return emails;
+            });
         }
 
         public Task<List<EmailSummary>> GetEmailsFromPstAsync(string filePath)
@@ -75,7 +113,32 @@ namespace MboxToPstBlazorApp.Services
                 {
                     progress?.Report(new ConversionProgress { ProgressPercentage = 0, Message = "Starting conversion..." });
                     
-                    _converter.ConvertMboxToPst(mboxPath, pstPath);
+                    int currentStep = 0;
+                    
+                    var parsingProgress = new Progress<MboxParsingProgress>(p =>
+                    {
+                        var percentage = (currentStep * 50) + (p.MessageCount > 0 ? Math.Min(40, p.MessageCount / 10) : 0);
+                        progress?.Report(new ConversionProgress 
+                        { 
+                            ProgressPercentage = Math.Min(50, percentage), 
+                            Message = $"Parsing: {p.Message}" 
+                        });
+                    });
+                    
+                    var conversionProgress = new Progress<PstConversionProgress>(p =>
+                    {
+                        currentStep = 1;
+                        var percentage = 50 + (p.ProcessedCount > 0 ? Math.Min(45, p.ProcessedCount / 10) : 0);
+                        if (p.IsCompleted) percentage = 100;
+                        
+                        progress?.Report(new ConversionProgress 
+                        { 
+                            ProgressPercentage = Math.Min(100, percentage), 
+                            Message = $"Converting: {p.Message}" 
+                        });
+                    });
+                    
+                    _converter.ConvertMboxToPst(mboxPath, pstPath, parsingProgress, conversionProgress);
                     
                     progress?.Report(new ConversionProgress { ProgressPercentage = 100, Message = "Conversion completed successfully!" });
                     
@@ -132,5 +195,13 @@ namespace MboxToPstBlazorApp.Services
     {
         public int ProgressPercentage { get; set; }
         public string Message { get; set; } = string.Empty;
+    }
+
+    public class EmailLoadingProgress
+    {
+        public string Message { get; set; } = string.Empty;
+        public int EmailCount { get; set; }
+        public double FileSizeMB { get; set; }
+        public bool IsCompleted { get; set; }
     }
 }

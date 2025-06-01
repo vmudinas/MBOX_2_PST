@@ -69,6 +69,18 @@
                         <small class="text-muted">@progressMessage</small>
                     </div>
                 }
+
+                @if (isLoading)
+                {
+                    <div class="mb-3">
+                        <div class="progress">
+                            <div class="progress-bar bg-info" role="progressbar" style="width: @(loadingProgress)%" aria-valuenow="@loadingProgress" aria-valuemin="0" aria-valuemax="100">
+                                @loadingProgress%
+                            </div>
+                        </div>
+                        <small class="text-muted">@loadingMessage</small>
+                    </div>
+                }
             </div>
         </div>
     </div>
@@ -120,6 +132,27 @@
     </div>
 </div>
 
+@if (eventLog.Any())
+{
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Event Log / Progress Log</h5>
+                </div>
+                <div class="card-body">
+                    <div style="max-height: 200px; overflow-y: auto; background-color: #f8f9fa; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 0.85em;">
+                        @foreach (var logEntry in eventLog.AsEnumerable().Reverse())
+                        {
+                            <div>@logEntry</div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @if (selectedEmail != null)
 {
     <div class="row mt-4">
@@ -154,6 +187,9 @@
     private string statusAlertClass = "";
     private int conversionProgress = 0;
     private string progressMessage = "";
+    private int loadingProgress = 0;
+    private string loadingMessage = "";
+    private List<string> eventLog = new List<string>();
 
     private async Task LoadEmails()
     {
@@ -172,14 +208,33 @@
         isLoading = true;
         selectedEmail = null;
         emails = null;
+        eventLog.Clear();
+        loadingProgress = 0;
+        loadingMessage = "Preparing to load emails...";
+
+        AddToEventLog("Starting email loading process...");
 
         try
         {
             var extension = Path.GetExtension(inputPath).ToLowerInvariant();
 
+            var progress = new Progress<EmailLoadingProgress>(p =>
+            {
+                loadingMessage = p.Message;
+                if (p.EmailCount > 0)
+                {
+                    // For large files, we can't easily calculate exact percentage
+                    // so we'll show progress based on message count
+                    var estimatedProgress = Math.Min(90, p.EmailCount / 100); // Cap at 90% during loading
+                    loadingProgress = estimatedProgress;
+                }
+                AddToEventLog(p.Message);
+                InvokeAsync(StateHasChanged);
+            });
+
             if (extension == ".mbox")
             {
-                emails = await EmailService.GetEmailsFromMboxAsync(inputPath);
+                emails = await EmailService.GetEmailsFromMboxAsync(inputPath, progress);
             }
             else if (extension == ".pst")
             {
@@ -191,11 +246,15 @@
                 return;
             }
 
+            loadingProgress = 100;
+            loadingMessage = "Loading completed!";
             SetStatusMessage($"Successfully loaded {emails.Count} emails.", "alert-success");
+            AddToEventLog($"Email loading completed successfully. Total emails: {emails.Count}");
         }
         catch (Exception ex)
         {
             SetStatusMessage($"Error loading emails: {ex.Message}", "alert-danger");
+            AddToEventLog($"Error loading emails: {ex.Message}");
             emails = null;
         }
         finally
@@ -231,10 +290,15 @@
         conversionProgress = 0;
         progressMessage = "Preparing conversion...";
 
+        AddToEventLog($"Starting conversion from {inputExt} to {outputExt}");
+        AddToEventLog($"Input file: {Path.GetFileName(inputPath)}");
+        AddToEventLog($"Output file: {Path.GetFileName(outputPath)}");
+
         var progress = new Progress<ConversionProgress>(p =>
         {
             conversionProgress = p.ProgressPercentage;
             progressMessage = p.Message;
+            AddToEventLog(p.Message);
             InvokeAsync(StateHasChanged);
         });
 
@@ -254,15 +318,18 @@
             if (result.Success)
             {
                 SetStatusMessage(result.Message, "alert-success");
+                AddToEventLog($"Conversion completed successfully: {result.Message}");
             }
             else
             {
                 SetStatusMessage($"Conversion failed: {result.Message}", "alert-danger");
+                AddToEventLog($"Conversion failed: {result.Message}");
             }
         }
         catch (Exception ex)
         {
             SetStatusMessage($"Conversion error: {ex.Message}", "alert-danger");
+            AddToEventLog($"Conversion error: {ex.Message}");
         }
         finally
         {
@@ -279,5 +346,17 @@
     {
         statusMessage = message;
         statusAlertClass = alertClass;
+    }
+
+    private void AddToEventLog(string message)
+    {
+        var timestamp = DateTime.Now.ToString("HH:mm:ss");
+        eventLog.Add($"[{timestamp}] {message}");
+        
+        // Keep only the last 50 log entries to prevent memory issues
+        if (eventLog.Count > 50)
+        {
+            eventLog.RemoveAt(0);
+        }
     }
 }
