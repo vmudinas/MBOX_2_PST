@@ -1,23 +1,18 @@
 # MBOX_2_PST
 Mbox to pst converter
 
-A multi-platform solution for converting MBOX files to PST format.
+A .NET solution for converting MBOX files to PST format with both console and web UI interfaces.
 
-## Available Implementations
+## Features
 
-### C# Version (Production Ready)
 - .NET console application that converts between MBOX and PST formats **bidirectionally**
+- .NET Blazor web application for email viewing and conversion management
 - Uses MimeKit for MBOX parsing and Aspose.Email for PST creation/reading
 - Command-line interface for easy automation
+- Web-based user interface for interactive email viewing and conversion
 - Preserves email metadata, attachments, and formatting
 
-### JavaScript Version (Demo/Viewing)
-- Node.js backend for MBOX parsing with React frontend
-- Web interface for viewing MBOX files and emails
-- Simulated conversion process demonstration
-- File upload and email browsing capabilities
-
-## C# Version
+## Console Application
 
 ### Features
 
@@ -152,54 +147,52 @@ If no messages are being processed:
 - Progress is shown every 10-50 messages depending on the operation
 - Consider splitting very large MBOX files if conversion takes too long
 
-### Building
-
-```bash
-cd MboxToPstConverter
-dotnet build
-```
-
 ### Dependencies
 
 - MimeKit - for parsing MBOX files
 - Aspose.Email - for creating PST files
 
-## JavaScript Version
+## Blazor Web Application
 
 ### Features
 
-- Upload and parse MBOX files through web interface
-- View email list with metadata (sender, subject, date)
-- View full email content including headers and body
-- Simulated PST conversion process with progress tracking
-- Responsive React-based user interface
+- Cross-platform web-based user interface
+- Email viewing for both MBOX and PST formats
+- Interactive file selection for input and output paths
+- Real-time conversion progress display
+- Email list browsing and content preview
 
 ### Requirements
 
-- Node.js 16+ and npm
-- Modern web browser
+- .NET 8.0 or later
 
-### Quick Start
+### Usage
 
 ```bash
-# Start backend API
-cd javascript-version/backend
-npm install
-npm start
-
-# Start frontend (in another terminal)
-cd javascript-version/frontend
-npm install
-npm start
+cd MboxToPstBlazorApp
+dotnet run
 ```
 
-Then open http://localhost:3000 in your browser.
+Then open https://localhost:5001 (or the URL shown in the console) in your web browser.
 
-### Note on JavaScript PST Creation
+### Building
 
-The JavaScript version provides MBOX parsing and viewing capabilities but cannot create actual PST files, as PST is a proprietary Microsoft format requiring specialized libraries not readily available in JavaScript. For actual PST file creation, use the C# version.
+**Entire Solution:**
+```bash
+dotnet build
+```
 
-See [javascript-version/README.md](javascript-version/README.md) for detailed JavaScript setup and usage instructions.
+**Console Application:**
+```bash
+cd MboxToPstConverter
+dotnet build
+```
+
+**Blazor Web Application:**
+```bash
+cd MboxToPstBlazorApp
+dotnet build
+```
 
 ## License
 
