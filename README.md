@@ -6,8 +6,8 @@ A multi-platform solution for converting MBOX files to PST format.
 ## Available Implementations
 
 ### C# Version (Production Ready)
-- .NET console application that converts MBOX files to PST format
-- Uses MimeKit for MBOX parsing and Aspose.Email for PST creation
+- .NET console application that converts between MBOX and PST formats **bidirectionally**
+- Uses MimeKit for MBOX parsing and Aspose.Email for PST creation/reading
 - Command-line interface for easy automation
 - Preserves email metadata, attachments, and formatting
 
@@ -21,7 +21,9 @@ A multi-platform solution for converting MBOX files to PST format.
 
 ### Features
 
-- Converts MBOX files to PST format
+- **Bidirectional conversion** between MBOX and PST formats
+  - MBOX to PST conversion
+  - PST to MBOX conversion (reverse conversion)
 - Preserves email metadata (sender, recipients, subject, date)
 - Handles email attachments
 - Command-line interface for easy automation
@@ -33,20 +35,42 @@ A multi-platform solution for converting MBOX files to PST format.
 
 ### Usage
 
+The converter supports bidirectional conversion between MBOX and PST formats:
+
 ```bash
 cd MboxToPstConverter
-dotnet run <input.mbox> <output.pst>
+dotnet run <input> <output>
+```
+
+#### Conversion Types
+
+**MBOX to PST:**
+```bash
+dotnet run input.mbox output.pst
+```
+
+**PST to MBOX:**
+```bash
+dotnet run input.pst output.mbox
 ```
 
 #### Parameters
 
-- `input.mbox` - Path to the input MBOX file
-- `output.pst` - Path to the output PST file
+- `input` - Path to the input file (MBOX or PST format)
+- `output` - Path to the output file (PST or MBOX format)
 
-#### Example
+The conversion direction is automatically determined by the file extensions.
 
+#### Examples
+
+Convert MBOX to PST:
 ```bash
 dotnet run emails.mbox converted_emails.pst
+```
+
+Convert PST to MBOX:
+```bash
+dotnet run emails.pst converted_emails.mbox
 ```
 
 ### Expected Output and Error Messages

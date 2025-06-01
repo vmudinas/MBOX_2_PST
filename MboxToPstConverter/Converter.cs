@@ -4,11 +4,15 @@ public class Converter
 {
     private readonly MboxParser _mboxParser;
     private readonly PstWriter _pstWriter;
+    private readonly PstReader _pstReader;
+    private readonly MboxWriter _mboxWriter;
 
     public Converter()
     {
         _mboxParser = new MboxParser();
         _pstWriter = new PstWriter();
+        _pstReader = new PstReader();
+        _mboxWriter = new MboxWriter();
     }
 
     public void ConvertMboxToPst(string mboxFilePath, string pstFilePath)
@@ -31,6 +35,34 @@ public class Converter
             Console.WriteLine();
             Console.WriteLine("Conversion completed successfully!");
             Console.WriteLine($"PST file created: {pstFilePath}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Conversion failed: {ex.Message}");
+            throw;
+        }
+    }
+
+    public void ConvertPstToMbox(string pstFilePath, string mboxFilePath)
+    {
+        Console.WriteLine($"Starting conversion from {Path.GetFileName(pstFilePath)} to {Path.GetFileName(mboxFilePath)}");
+        Console.WriteLine($"Input: {pstFilePath}");
+        Console.WriteLine($"Output: {mboxFilePath}");
+        Console.WriteLine();
+
+        try
+        {
+            // Parse PST file and get messages
+            var messages = _pstReader.ParsePstFile(pstFilePath);
+            
+            Console.WriteLine();
+            
+            // Create MBOX file from messages
+            _mboxWriter.CreateMboxFromMessages(messages, mboxFilePath);
+            
+            Console.WriteLine();
+            Console.WriteLine("Conversion completed successfully!");
+            Console.WriteLine($"MBOX file created: {mboxFilePath}");
         }
         catch (Exception ex)
         {
