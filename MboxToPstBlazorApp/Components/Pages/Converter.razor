@@ -144,34 +144,15 @@
                             if (filteredEmails.Count > 0)
                             {
                                 <small class="text-muted">Found @filteredEmails.Count email(s) matching "@searchTerm"</small>
-                                @if (isLargeFile)
-                                {
-                                    <br />
-                                    <small class="text-info">ℹ️ Searching within the first @emails.Count preview emails only. @(totalEmailCount - emails.Count) additional emails available during conversion.</small>
-                                }
                             }
                             else
                             {
                                 <small class="text-warning">No emails found matching "@searchTerm"</small>
-                                @if (isLargeFile)
-                                {
-                                    <br />
-                                    <small class="text-info">ℹ️ Search performed on preview emails only. More emails may be available during conversion.</small>
-                                }
                             }
                         }
                         else
                         {
-                            @if (isLargeFile)
-                            {
-                                <small class="text-muted">Found @totalEmailCount emails (showing first @emails.Count for preview)</small>
-                                <br />
-                                <small class="text-info">ℹ️ Large file optimization: Only first @emails.Count emails loaded for preview. All @totalEmailCount emails will be converted during conversion.</small>
-                            }
-                            else
-                            {
-                                <small class="text-muted">Found @emails.Count emails</small>
-                            }
+                            <small class="text-muted">Found @emails.Count emails</small>
                         }
                     </div>
                     <div style="max-height: 400px; overflow-y: auto;">
@@ -194,10 +175,6 @@
                                     </p>
                                 </div>
                             </div>
-                        }
-                        @if (isLargeFile && totalEmailCount > emails.Count && string.IsNullOrEmpty(searchTerm))
-                        {
-                            <small class="text-muted">... and @(totalEmailCount - emails.Count) more emails (will be included in conversion)</small>
                         }
                     </div>
                 }
@@ -273,7 +250,6 @@
     private string loadingMessage = "";
     private List<string> eventLog = new List<string>();
     private int totalEmailCount = 0;
-    private bool isLargeFile = false;
     private string searchTerm = "";
     private List<EmailSummary> filteredEmails = new List<EmailSummary>();
     private bool hasConvertedFile = false;
@@ -299,7 +275,6 @@
         selectedEmail = null;
         emails = null;
         totalEmailCount = 0;
-        isLargeFile = false;
         searchTerm = "";
         filteredEmails = new List<EmailSummary>();
         eventLog.Clear();
@@ -328,57 +303,31 @@
 
             if (extension == ".mbox")
             {
-                // Check file size to decide on loading strategy
+                // Always load all emails as requested - no preview limitation
                 var fileInfo = new FileInfo(inputPath);
                 var fileSizeMB = fileInfo.Length / 1024.0 / 1024.0;
                 
-                if (fileSizeMB > 50) // For files larger than 50MB, use optimized approach
-                {
-                    isLargeFile = true;
-                    AddToEventLog($"Large file detected ({fileSizeMB:F2} MB). Using optimized loading...");
-                    
-                    var metadata = await EmailService.GetEmailMetadataFromMboxAsync(inputPath, progress);
-                    emails = metadata.PreviewEmails;
-                    totalEmailCount = metadata.TotalEmailCount;
-                    
-                    SetStatusMessage($"Successfully loaded metadata for {totalEmailCount} emails. Showing first {emails.Count} for preview.", "alert-success");
-                    AddToEventLog($"Optimized loading completed. Total emails: {totalEmailCount}, Preview: {emails.Count}");
-                }
-                else
-                {
-                    // For smaller files, load all emails as before
-                    emails = await EmailService.GetEmailsFromMboxAsync(inputPath, progress);
-                    totalEmailCount = emails.Count;
-                    SetStatusMessage($"Successfully loaded {emails.Count} emails.", "alert-success");
-                    AddToEventLog($"Standard loading completed. Total emails: {emails.Count}");
-                }
+                AddToEventLog($"Loading all emails from MBOX file ({fileSizeMB:F2} MB)...");
+                
+                emails = await EmailService.GetEmailsFromMboxAsync(inputPath, progress);
+                totalEmailCount = emails.Count;
+                
+                SetStatusMessage($"Successfully loaded {emails.Count} emails.", "alert-success");
+                AddToEventLog($"Loading completed. Total emails: {emails.Count}");
             }
             else if (extension == ".pst")
             {
-                // Check file size to decide on loading strategy
+                // Always load all emails as requested - no preview limitation  
                 var fileInfo = new FileInfo(inputPath);
                 var fileSizeMB = fileInfo.Length / 1024.0 / 1024.0;
                 
-                if (fileSizeMB > 50) // For files larger than 50MB, use optimized approach
-                {
-                    isLargeFile = true;
-                    AddToEventLog($"Large PST file detected ({fileSizeMB:F2} MB). Using optimized loading...");
-                    
-                    var metadata = await EmailService.GetEmailMetadataFromPstAsync(inputPath, progress);
-                    emails = metadata.PreviewEmails;
-                    totalEmailCount = metadata.TotalEmailCount;
-                    
-                    SetStatusMessage($"Successfully loaded metadata for {totalEmailCount} emails. Showing first {emails.Count} for preview.", "alert-success");
-                    AddToEventLog($"Optimized PST loading completed. Total emails: {totalEmailCount}, Preview: {emails.Count}");
-                }
-                else
-                {
-                    // For smaller PST files, load all emails as before
-                    emails = await EmailService.GetEmailsFromPstAsync(inputPath);
-                    totalEmailCount = emails.Count;
-                    SetStatusMessage($"Successfully loaded {emails.Count} emails.", "alert-success");
-                    AddToEventLog($"Standard PST loading completed. Total emails: {emails.Count}");
-                }
+                AddToEventLog($"Loading all emails from PST file ({fileSizeMB:F2} MB)...");
+                
+                emails = await EmailService.GetEmailsFromPstAsync(inputPath);
+                totalEmailCount = emails.Count;
+                
+                SetStatusMessage($"Successfully loaded {emails.Count} emails.", "alert-success");
+                AddToEventLog($"Loading completed. Total emails: {emails.Count}");
             }
             else
             {
@@ -404,9 +353,9 @@
 
     private async Task StartConversion()
     {
-        if (string.IsNullOrWhiteSpace(inputPath) || string.IsNullOrWhiteSpace(outputPath))
+        if (string.IsNullOrWhiteSpace(inputPath))
         {
-            SetStatusMessage("Please enter both input and output file paths.", "alert-warning");
+            SetStatusMessage("Please enter an input file path.", "alert-warning");
             return;
         }
 
@@ -417,6 +366,23 @@
         }
 
         var inputExt = Path.GetExtension(inputPath).ToLowerInvariant();
+        
+        // Auto-generate output path if not specified
+        if (string.IsNullOrWhiteSpace(outputPath))
+        {
+            var inputDir = Path.GetDirectoryName(inputPath) ?? Directory.GetCurrentDirectory();
+            var inputFileName = Path.GetFileNameWithoutExtension(inputPath);
+            var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            
+            // Determine target extension based on input
+            var targetExt = inputExt == ".mbox" ? ".pst" : ".mbox";
+            
+            outputPath = Path.Combine(inputDir, $"{timestamp}_{inputFileName}{targetExt}");
+            
+            SetStatusMessage($"Auto-generated output path: {outputPath}", "alert-info");
+            AddToEventLog($"Auto-generated output path: {outputPath}");
+        }
+        
         var outputExt = Path.GetExtension(outputPath).ToLowerInvariant();
 
         if (!((inputExt == ".mbox" && outputExt == ".pst") || (inputExt == ".pst" && outputExt == ".mbox")))
@@ -589,6 +555,9 @@
                 inputPath = filePath;
                 SetStatusMessage($"Successfully uploaded {file.Name}. File saved to: {filePath}", "alert-success");
                 AddToEventLog($"Upload completed: {filePath}");
+                
+                // Force UI update to show the new input path
+                await InvokeAsync(StateHasChanged);
             }
             catch (Exception ex)
             {
