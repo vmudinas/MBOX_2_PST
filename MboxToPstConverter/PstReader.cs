@@ -8,6 +8,94 @@ namespace MboxToPstConverter;
 
 public class PstReader
 {
+    public async Task<int> CountPstMessagesAsync(string pstFilePath, IProgress<PstParsingProgress>? progress = null)
+    {
+        return await Task.Run(() =>
+        {
+            if (!File.Exists(pstFilePath))
+            {
+                throw new FileNotFoundException($"PST file not found: {pstFilePath}");
+            }
+
+            var fileInfo = new FileInfo(pstFilePath);
+            var fileSizeInMB = fileInfo.Length / 1024.0 / 1024.0;
+            
+            progress?.Report(new PstParsingProgress 
+            { 
+                Message = $"Counting messages in PST file ({fileSizeInMB:F2} MB)", 
+                MessageCount = 0,
+                FileSizeMB = fileSizeInMB
+            });
+
+            using var pst = PersonalStorage.FromFile(pstFilePath);
+            
+            int messageCount = CountMessagesInFolder(pst, pst.RootFolder, progress, fileSizeInMB);
+            
+            progress?.Report(new PstParsingProgress 
+            { 
+                Message = $"Finished counting. Total messages: {messageCount}", 
+                MessageCount = messageCount,
+                FileSizeMB = fileSizeInMB,
+                IsCompleted = true
+            });
+
+            return messageCount;
+        });
+    }
+
+    public async Task<List<MimeMessage>> GetFirstPstMessagesAsync(string pstFilePath, int maxCount, IProgress<PstParsingProgress>? progress = null)
+    {
+        return await Task.Run(() =>
+        {
+            if (!File.Exists(pstFilePath))
+            {
+                throw new FileNotFoundException($"PST file not found: {pstFilePath}");
+            }
+
+            var messages = new List<MimeMessage>();
+            var fileInfo = new FileInfo(pstFilePath);
+            var fileSizeInMB = fileInfo.Length / 1024.0 / 1024.0;
+            
+            progress?.Report(new PstParsingProgress 
+            { 
+                Message = $"Loading first {maxCount} messages from PST file ({fileSizeInMB:F2} MB)", 
+                MessageCount = 0,
+                FileSizeMB = fileSizeInMB
+            });
+
+            using var pst = PersonalStorage.FromFile(pstFilePath);
+            
+            int messageCount = 0;
+            foreach (var message in ExtractMessagesFromFolder(pst, pst.RootFolder))
+            {
+                if (messages.Count >= maxCount) break;
+                
+                messages.Add(message);
+                messageCount++;
+                
+                if (messageCount % 10 == 0)
+                {
+                    progress?.Report(new PstParsingProgress 
+                    { 
+                        Message = $"Loaded {messageCount} messages for preview...", 
+                        MessageCount = messageCount,
+                        FileSizeMB = fileSizeInMB
+                    });
+                }
+            }
+            
+            progress?.Report(new PstParsingProgress 
+            { 
+                Message = $"Loaded {messages.Count} messages for preview", 
+                MessageCount = messages.Count,
+                FileSizeMB = fileSizeInMB,
+                IsCompleted = true
+            });
+
+            return messages;
+        });
+    }
+
     public IEnumerable<MimeMessage> ParsePstFile(string pstFilePath)
     {
         if (!File.Exists(pstFilePath))
@@ -169,4 +257,40 @@ public class PstReader
             return null;
         }
     }
+
+    private int CountMessagesInFolder(PersonalStorage pst, FolderInfo folder, IProgress<PstParsingProgress>? progress, double fileSizeInMB)
+    {
+        int count = 0;
+        
+        // Count messages in current folder
+        foreach (var messageInfo in folder.EnumerateMessages())
+        {
+            count++;
+            if (count % 100 == 0)
+            {
+                progress?.Report(new PstParsingProgress 
+                { 
+                    Message = $"Counted {count} messages...", 
+                    MessageCount = count,
+                    FileSizeMB = fileSizeInMB
+                });
+            }
+        }
+
+        // Recursively count messages in subfolders
+        foreach (var subFolder in folder.GetSubFolders())
+        {
+            count += CountMessagesInFolder(pst, subFolder, progress, fileSizeInMB);
+        }
+
+        return count;
+    }
+}
+
+public class PstParsingProgress
+{
+    public string Message { get; set; } = string.Empty;
+    public int MessageCount { get; set; }
+    public double FileSizeMB { get; set; }
+    public bool IsCompleted { get; set; }
 }
