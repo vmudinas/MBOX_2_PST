@@ -213,7 +213,8 @@ namespace MboxToPstBlazorApp.Services
                     
                     var parsingProgress = new Progress<MboxParsingProgress>(p =>
                     {
-                        var percentage = Math.Min(40, (p.MessageCount > 0 ? p.MessageCount / 50 : 0));
+                        // Use parsing progress as 40% of total conversion
+                        var percentage = p.IsCompleted ? 40 : Math.Min(40, (p.MessageCount > 0 ? (p.MessageCount * 40) / Math.Max(1, p.MessageCount) : 0));
                         progress?.Report(new ConversionProgress 
                         { 
                             ProgressPercentage = Math.Min(40, percentage), 
@@ -223,7 +224,12 @@ namespace MboxToPstBlazorApp.Services
                     
                     var conversionProgress = new Progress<PstConversionProgress>(p =>
                     {
-                        var percentage = 40 + Math.Min(55, (p.ProcessedCount > 0 ? (p.ProcessedCount * 55) / Math.Max(1, p.ProcessedCount + p.FailedCount + 100) : 0));
+                        // Use conversion progress as 60% of total (40-100%)
+                        int percentage = 40;
+                        if (p.ProcessedCount > 0)
+                        {
+                            percentage = 40 + (p.ProcessedCount * 60) / Math.Max(1, p.ProcessedCount + Math.Max(0, p.FailedCount));
+                        }
                         if (p.IsCompleted) percentage = 100;
                         
                         progress?.Report(new ConversionProgress 
