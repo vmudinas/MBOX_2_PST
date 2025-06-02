@@ -28,6 +28,7 @@ builder.Services.Configure<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServe
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<GmailService>();
 builder.Services.AddSingleton<UploadSessionService>();
+builder.Services.AddSingleton<IncrementalParsingService>();
 builder.Services.AddScoped<ChunkedUploadService>();
 
 // Add HttpClient for API calls

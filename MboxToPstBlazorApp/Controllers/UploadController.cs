@@ -9,11 +9,16 @@ namespace MboxToPstBlazorApp.Controllers
     public class UploadController : ControllerBase
     {
         private readonly UploadSessionService _sessionService;
+        private readonly IncrementalParsingService _parsingService;
         private readonly ILogger<UploadController> _logger;
 
-        public UploadController(UploadSessionService sessionService, ILogger<UploadController> logger)
+        public UploadController(
+            UploadSessionService sessionService, 
+            IncrementalParsingService parsingService,
+            ILogger<UploadController> logger)
         {
             _sessionService = sessionService;
+            _parsingService = parsingService;
             _logger = logger;
         }
 
@@ -62,6 +67,19 @@ namespace MboxToPstBlazorApp.Controllers
                 {
                     return BadRequest(new { Message = "Failed to process chunk" });
                 }
+
+                // Try to parse new emails incrementally (async, don't wait)
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _parsingService.TryParseNewChunks(request.SessionId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error during incremental parsing for session {SessionId}", request.SessionId);
+                    }
+                });
 
                 var updatedSession = _sessionService.GetSession(request.SessionId);
                 return Ok(new UploadChunkResponse

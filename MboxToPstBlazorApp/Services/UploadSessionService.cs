@@ -3,15 +3,25 @@ using MboxToPstBlazorApp.Models;
 
 namespace MboxToPstBlazorApp.Services
 {
-    public class UploadSessionService
+    public class UploadSessionService : IDisposable
     {
         private readonly ConcurrentDictionary<string, UploadSession> _sessions = new();
         private readonly string _tempDirectory;
+        private readonly Timer _cleanupTimer;
+
+        public event Action<string>? SessionDeleted;
 
         public UploadSessionService()
         {
             _tempDirectory = Path.Combine(Directory.GetCurrentDirectory(), "temp_uploads");
             Directory.CreateDirectory(_tempDirectory);
+            
+            // Setup cleanup timer to run every hour
+            _cleanupTimer = new Timer(
+                _ => CleanupOldSessions(TimeSpan.FromHours(24)), 
+                null, 
+                TimeSpan.FromMinutes(60), 
+                TimeSpan.FromMinutes(60));
         }
 
         public string CreateSession(string fileName, long totalSize)
@@ -129,11 +139,14 @@ namespace MboxToPstBlazorApp.Services
                 {
                     if (File.Exists(session.TempFilePath))
                         File.Delete(session.TempFilePath);
+                    
+                    SessionDeleted?.Invoke(sessionId);
                     return true;
                 }
                 catch
                 {
                     // Log error but don't fail the deletion from memory
+                    SessionDeleted?.Invoke(sessionId);
                     return true;
                 }
             }
@@ -152,6 +165,11 @@ namespace MboxToPstBlazorApp.Services
             {
                 DeleteSession(sessionId);
             }
+        }
+
+        public void Dispose()
+        {
+            _cleanupTimer?.Dispose();
         }
     }
 }

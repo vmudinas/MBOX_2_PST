@@ -11,6 +11,14 @@ public class MboxParsingProgress
     public bool IsCompleted { get; set; }
 }
 
+public class IncrementalParseResult
+{
+    public List<MimeMessage> NewMessages { get; set; } = new();
+    public long LastParsedPosition { get; set; }
+    public int TotalParsedCount { get; set; }
+    public bool HasMoreData { get; set; }
+}
+
 public class MboxParser
 {
     public IEnumerable<MimeMessage> ParseMboxFile(string mboxFilePath)
@@ -226,5 +234,171 @@ public class MboxParser
 
             return messages;
         });
+    }
+
+    /// <summary>
+    /// Parse MBOX file incrementally from a specific position, useful for streaming uploads
+    /// </summary>
+    public IncrementalParseResult ParseMboxIncremental(string mboxFilePath, long startPosition = 0, IProgress<MboxParsingProgress>? progress = null)
+    {
+        if (!File.Exists(mboxFilePath))
+        {
+            throw new FileNotFoundException($"MBOX file not found: {mboxFilePath}");
+        }
+
+        var result = new IncrementalParseResult();
+        var fileInfo = new FileInfo(mboxFilePath);
+        var fileSizeInMB = fileInfo.Length / 1024.0 / 1024.0;
+
+        // If file is smaller than start position, nothing to parse
+        if (fileInfo.Length <= startPosition)
+        {
+            result.LastParsedPosition = startPosition;
+            result.HasMoreData = false;
+            return result;
+        }
+
+        progress?.Report(new MboxParsingProgress 
+        { 
+            Message = $"Parsing new content from position {startPosition} ({fileSizeInMB:F2} MB total)", 
+            MessageCount = 0,
+            FileSizeMB = fileSizeInMB
+        });
+
+        using var stream = File.OpenRead(mboxFilePath);
+        
+        // If starting from the beginning, parse normally
+        if (startPosition == 0)
+        {
+            var parser = new MimeParser(stream, MimeFormat.Mbox);
+            int messageCount = 0;
+            
+            while (!parser.IsEndOfStream)
+            {
+                try
+                {
+                    var message = parser.ParseMessage();
+                    if (message != null)
+                    {
+                        result.NewMessages.Add(message);
+                        messageCount++;
+                        
+                        if (messageCount % 10 == 0)
+                        {
+                            progress?.Report(new MboxParsingProgress 
+                            { 
+                                Message = $"Parsed {messageCount} new messages...", 
+                                MessageCount = messageCount,
+                                FileSizeMB = fileSizeInMB
+                            });
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Skipped malformed message during incremental parse: {ex.Message}");
+                    continue;
+                }
+            }
+            
+            result.LastParsedPosition = stream.Position;
+            result.TotalParsedCount = messageCount;
+        }
+        else
+        {
+            // For incremental parsing from a position, we need to be more careful
+            // Try to find a good starting point (look for message boundaries)
+            result = ParseFromPosition(stream, startPosition, fileSizeInMB, progress);
+        }
+
+        result.HasMoreData = result.LastParsedPosition < fileInfo.Length;
+        return result;
+    }
+
+    private IncrementalParseResult ParseFromPosition(FileStream stream, long startPosition, double fileSizeMB, IProgress<MboxParsingProgress>? progress)
+    {
+        var result = new IncrementalParseResult();
+        
+        // Seek to start position
+        stream.Seek(startPosition, SeekOrigin.Begin);
+        
+        // Look backwards to find the last complete message boundary (line starting with "From ")
+        var goodStartPosition = FindMessageBoundary(stream, startPosition);
+        if (goodStartPosition != startPosition)
+        {
+            stream.Seek(goodStartPosition, SeekOrigin.Begin);
+        }
+
+        try
+        {
+            var parser = new MimeParser(stream, MimeFormat.Mbox);
+            int messageCount = 0;
+            
+            while (!parser.IsEndOfStream)
+            {
+                try
+                {
+                    var message = parser.ParseMessage();
+                    if (message != null)
+                    {
+                        result.NewMessages.Add(message);
+                        messageCount++;
+                        
+                        if (messageCount % 5 == 0)
+                        {
+                            progress?.Report(new MboxParsingProgress 
+                            { 
+                                Message = $"Parsed {messageCount} new messages from incremental data...", 
+                                MessageCount = messageCount,
+                                FileSizeMB = fileSizeMB
+                            });
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Skipped malformed message during incremental parse: {ex.Message}");
+                    continue;
+                }
+            }
+            
+            result.LastParsedPosition = stream.Position;
+            result.TotalParsedCount = messageCount;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error during incremental parsing: {ex.Message}");
+            result.LastParsedPosition = startPosition;
+        }
+
+        return result;
+    }
+
+    private long FindMessageBoundary(FileStream stream, long startPosition)
+    {
+        // Simple approach: go back and look for "From " at beginning of line
+        var buffer = new byte[8192];
+        var searchPosition = Math.Max(0, startPosition - 4096);
+        
+        stream.Seek(searchPosition, SeekOrigin.Begin);
+        var bytesRead = stream.Read(buffer, 0, buffer.Length);
+        
+        // Look for "\nFrom " pattern
+        for (int i = bytesRead - 6; i >= 0; i--)
+        {
+            if (buffer[i] == '\n' && 
+                i + 5 < bytesRead &&
+                buffer[i + 1] == 'F' && 
+                buffer[i + 2] == 'r' && 
+                buffer[i + 3] == 'o' && 
+                buffer[i + 4] == 'm' && 
+                buffer[i + 5] == ' ')
+            {
+                return searchPosition + i + 1; // Position right after the \n
+            }
+        }
+        
+        // If no boundary found, return original position
+        return startPosition;
     }
 }
