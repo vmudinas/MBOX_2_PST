@@ -7,6 +7,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// Add API controllers for upload endpoints
+builder.Services.AddControllers();
+
 // Configure form options for large file uploads
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
 {
@@ -24,6 +27,7 @@ builder.Services.Configure<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServe
 // Register custom services
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<GmailService>();
+builder.Services.AddSingleton<UploadSessionService>();
 
 // Add minimal authentication for Gmail OAuth
 builder.Services.AddAuthentication();
@@ -45,6 +49,9 @@ app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+// Map API controllers
+app.MapControllers();
 
 // Add download endpoint for converted files
 app.MapGet("/download", async (HttpContext context, string file) =>
