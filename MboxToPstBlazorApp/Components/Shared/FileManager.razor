@@ -1,0 +1,268 @@
+@using MboxToPstBlazorApp.Models
+@using MboxToPstBlazorApp.Services
+@using MboxToPstBlazorApp.Components.Shared
+@inject ChunkedUploadService UploadService
+@inject IJSRuntime JSRuntime
+
+<div class="file-manager-component">
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">File Manager</h5>
+            <button class="btn btn-sm btn-outline-primary" @onclick="RefreshSessions">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+        </div>
+        <div class="card-body">
+            <!-- Upload Section -->
+            <div class="mb-4">
+                <h6>Upload New File</h6>
+                <ChunkedUpload 
+                    ButtonText="Upload MBOX/PST File"
+                    AcceptedFileTypes=".mbox,.pst"
+                    OnUploadCompleted="OnUploadCompleted"
+                    OnUploadProgress="OnUploadProgress" />
+            </div>
+
+            <!-- Active Sessions -->
+            @if (IsLoading)
+            {
+                <div class="text-center p-3">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading files...</p>
+                </div>
+            }
+            else if (Sessions.Count == 0)
+            {
+                <div class="alert alert-info">
+                    No uploaded files found. Upload a file to get started.
+                </div>
+            }
+            else
+            {
+                <h6>Uploaded Files (@Sessions.Count)</h6>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>File Name</th>
+                                <th>Size</th>
+                                <th>Status</th>
+                                <th>Progress</th>
+                                <th>Emails Parsed</th>
+                                <th>Upload Time</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var session in Sessions)
+                            {
+                                <tr class="@(session.Id == SelectedSessionId ? "table-active" : "")">
+                                    <td>
+                                        <button class="btn btn-link p-0 text-start text-decoration-none" 
+                                                @onclick="() => SelectSession(session.Id)">
+                                            <i class="bi bi-file-earmark-@(GetFileIcon(session.FileName)) me-1"></i>
+                                            @session.FileName
+                                        </button>
+                                    </td>
+                                    <td>@FormatBytes(session.TotalSize)</td>
+                                    <td>
+                                        <span class="badge @GetStatusBadgeClass(session.Status)">
+                                            @session.Status
+                                        </span>
+                                    </td>
+                                    <td>
+                                        @if (session.Status == UploadStatus.InProgress || session.Status == UploadStatus.Parsing)
+                                        {
+                                            <div class="progress" style="width: 100px;">
+                                                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                                     role="progressbar" 
+                                                     style="width: @(session.ProgressPercentage)%">
+                                                </div>
+                                            </div>
+                                            <small class="text-muted">@(session.ProgressPercentage.ToString("F1"))%</small>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">@(session.ProgressPercentage.ToString("F1"))%</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (session.ParsedEmailCount > 0)
+                                        {
+                                            <span class="badge bg-success">@session.ParsedEmailCount</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">0</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">@session.CreatedAt.ToString("yyyy-MM-dd HH:mm")</small>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group" role="group">
+                                            @if (session.ParsedEmailCount > 0)
+                                            {
+                                                <button class="btn btn-sm btn-outline-primary" 
+                                                        @onclick="() => SelectSession(session.Id)"
+                                                        title="View Emails">
+                                                    <i class="bi bi-envelope"></i>
+                                                </button>
+                                            }
+                                            @if (session.Status == UploadStatus.Completed || session.Status == UploadStatus.ParseCompleted)
+                                            {
+                                                <button class="btn btn-sm btn-outline-success" 
+                                                        @onclick="() => ConvertFile(session)"
+                                                        title="Convert File">
+                                                    <i class="bi bi-arrow-repeat"></i>
+                                                </button>
+                                            }
+                                            <button class="btn btn-sm btn-outline-danger" 
+                                                    @onclick="() => DeleteSession(session.Id)"
+                                                    title="Delete">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Selected Session Email View -->
+    @if (!string.IsNullOrEmpty(SelectedSessionId))
+    {
+        <div class="mt-4">
+            <EmailList SessionId="@SelectedSessionId" />
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public EventCallback<UploadSessionInfo> OnSessionSelected { get; set; }
+    [Parameter] public EventCallback<UploadSessionInfo> OnConvertRequested { get; set; }
+
+    private List<UploadSessionInfo> Sessions = new();
+    private string? SelectedSessionId = null;
+    private bool IsLoading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshSessions();
+    }
+
+    private async Task RefreshSessions()
+    {
+        IsLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            Sessions = await UploadService.GetAllSessions();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error refreshing sessions: {ex.Message}");
+        }
+        finally
+        {
+            IsLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnUploadCompleted(ChunkedUpload.UploadCompletedEventArgs args)
+    {
+        if (args.Success)
+        {
+            await RefreshSessions();
+            // Auto-select the newly uploaded session
+            SelectedSessionId = args.SessionId;
+            StateHasChanged();
+        }
+    }
+
+    private void OnUploadProgress(ChunkedUpload.UploadProgressEventArgs args)
+    {
+        // Could add real-time progress updates here
+    }
+
+    private async Task SelectSession(string sessionId)
+    {
+        SelectedSessionId = sessionId;
+        var session = Sessions.FirstOrDefault(s => s.Id == sessionId);
+        if (session != null)
+        {
+            await OnSessionSelected.InvokeAsync(session);
+        }
+        StateHasChanged();
+    }
+
+    private async Task ConvertFile(UploadSessionInfo session)
+    {
+        await OnConvertRequested.InvokeAsync(session);
+    }
+
+    private async Task DeleteSession(string sessionId)
+    {
+        if (await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this file?"))
+        {
+            try
+            {
+                var response = await UploadService.DeleteSession(sessionId);
+                await RefreshSessions();
+                if (SelectedSessionId == sessionId)
+                {
+                    SelectedSessionId = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error deleting session: {ex.Message}");
+            }
+        }
+    }
+
+    private string GetFileIcon(string fileName)
+    {
+        var extension = Path.GetExtension(fileName).ToLowerInvariant();
+        return extension switch
+        {
+            ".mbox" => "text",
+            ".pst" => "binary",
+            _ => "file"
+        };
+    }
+
+    private string GetStatusBadgeClass(UploadStatus status)
+    {
+        return status switch
+        {
+            UploadStatus.InProgress => "bg-primary",
+            UploadStatus.Completed => "bg-success",
+            UploadStatus.Failed => "bg-danger",
+            UploadStatus.Parsing => "bg-warning",
+            UploadStatus.ParseCompleted => "bg-info",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string FormatBytes(long bytes)
+    {
+        string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
+        int counter = 0;
+        decimal number = bytes;
+        while (Math.Round(number / 1024) >= 1)
+        {
+            number /= 1024;
+            counter++;
+        }
+        return $"{number:N1} {suffixes[counter]}";
+    }
+}

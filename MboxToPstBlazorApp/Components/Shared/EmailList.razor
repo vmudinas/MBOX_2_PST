@@ -1,0 +1,317 @@
+@using Microsoft.AspNetCore.SignalR.Client
+@using MboxToPstBlazorApp.Models
+@using MboxToPstBlazorApp.Services
+@using System.Text.Json
+@inject ChunkedUploadService UploadService
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
+
+<div class="email-list-component">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5>Parsed Emails (@TotalEmailCount total)</h5>
+        <div class="d-flex gap-2">
+            @if (IsRealTimeEnabled)
+            {
+                <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleRealTime">
+                    <i class="bi bi-pause-circle"></i> Pause Real-time
+                </button>
+            }
+            else
+            {
+                <button class="btn btn-sm btn-outline-success" @onclick="ToggleRealTime">
+                    <i class="bi bi-play-circle"></i> Enable Real-time
+                </button>
+            }
+            <button class="btn btn-sm btn-outline-primary" @onclick="RefreshEmails">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    @if (IsLoading)
+    {
+        <div class="text-center p-4">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading emails...</p>
+        </div>
+    }
+    else if (Emails.Count == 0)
+    {
+        <div class="alert alert-info">
+            No emails parsed yet. @if (!string.IsNullOrEmpty(SessionId)) { <text>Upload a file to see emails appear here in real-time.</text> }
+        </div>
+    }
+    else
+    {
+        <!-- Email Table -->
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 40%">Subject</th>
+                        <th style="width: 25%">From</th>
+                        <th style="width: 20%">Date</th>
+                        <th style="width: 10%">Attachments</th>
+                        <th style="width: 5%">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var email in Emails)
+                    {
+                        <tr class="@(email.Index == SelectedEmailIndex ? "table-active" : "")">
+                            <td>
+                                <button class="btn btn-link p-0 text-start text-decoration-none" 
+                                        @onclick="() => SelectEmail(email)">
+                                    @email.Subject
+                                </button>
+                            </td>
+                            <td class="text-truncate" title="@email.From">@email.From</td>
+                            <td>@email.Date.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td>
+                                @if (email.HasAttachments)
+                                {
+                                    <i class="bi bi-paperclip text-secondary"></i>
+                                }
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-secondary" 
+                                        @onclick="() => SelectEmail(email)"
+                                        title="View Email">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        @if (TotalPages > 1)
+        {
+            <nav aria-label="Email pagination">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item @(CurrentPage <= 1 ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => ChangePage(CurrentPage - 1)" disabled="@(CurrentPage <= 1)">
+                            Previous
+                        </button>
+                    </li>
+                    
+                    @for (int pageNum = Math.Max(1, CurrentPage - 2); pageNum <= Math.Min(TotalPages, CurrentPage + 2); pageNum++)
+                    {
+                        <li class="page-item @(pageNum == CurrentPage ? "active" : "")">
+                            <button class="page-link" @onclick="() => ChangePage(pageNum)">
+                                @pageNum
+                            </button>
+                        </li>
+                    }
+                    
+                    <li class="page-item @(CurrentPage >= TotalPages ? "disabled" : "")">
+                        <button class="page-link" @onclick="() => ChangePage(CurrentPage + 1)" disabled="@(CurrentPage >= TotalPages)">
+                            Next
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+            
+            <div class="text-center text-muted">
+                Page @CurrentPage of @TotalPages (showing @PageSize emails per page)
+            </div>
+        }
+
+        <!-- New Email Notification -->
+        @if (NewEmailCount > 0 && !IsRealTimeEnabled)
+        {
+            <div class="alert alert-success alert-dismissible fade show position-fixed" 
+                 style="top: 20px; right: 20px; z-index: 1050;">
+                <strong>@NewEmailCount new emails</strong> have been parsed!
+                <button class="btn btn-sm btn-success ms-2" @onclick="RefreshEmails">
+                    Show New Emails
+                </button>
+                <button type="button" class="btn-close" @onclick="() => NewEmailCount = 0"></button>
+            </div>
+        }
+    }
+
+    <!-- Email Detail Modal -->
+    @if (SelectedEmail != null)
+    {
+        <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">@SelectedEmail.Subject</h5>
+                        <button type="button" class="btn-close" @onclick="CloseEmailDetail"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row mb-3">
+                            <div class="col-sm-2"><strong>From:</strong></div>
+                            <div class="col-sm-10">@SelectedEmail.From</div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-sm-2"><strong>To:</strong></div>
+                            <div class="col-sm-10">@SelectedEmail.To</div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-sm-2"><strong>Date:</strong></div>
+                            <div class="col-sm-10">@SelectedEmail.Date.ToString("yyyy-MM-dd HH:mm:ss")</div>
+                        </div>
+                        <hr />
+                        <div class="email-body" style="max-height: 400px; overflow-y: auto;">
+                            @((MarkupString)SelectedEmail.Body.Replace("\n", "<br />"))
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseEmailDetail">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? SessionId { get; set; }
+    [Parameter] public int PageSize { get; set; } = 20;
+    [Parameter] public EventCallback<ParsedEmailInfo> OnEmailSelected { get; set; }
+
+    private List<ParsedEmailInfo> Emails = new();
+    private ParsedEmailInfo? SelectedEmail = null;
+    private int SelectedEmailIndex = -1;
+    private int CurrentPage = 1;
+    private int TotalEmailCount = 0;
+    private int TotalPages => (int)Math.Ceiling((double)TotalEmailCount / PageSize);
+    private bool IsLoading = false;
+    private bool IsRealTimeEnabled = true;
+    private int NewEmailCount = 0;
+
+    private HubConnection? hubConnection;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await SetupSignalRConnection();
+        await RefreshEmails();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrEmpty(SessionId))
+        {
+            await JoinSessionGroup();
+            await RefreshEmails();
+        }
+    }
+
+    private async Task SetupSignalRConnection()
+    {
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl("/emailHub")
+            .Build();
+
+        hubConnection.On<object>("NewEmailsParsed", async (data) =>
+        {
+            if (IsRealTimeEnabled)
+            {
+                await RefreshEmails();
+            }
+            else
+            {
+                // Count new emails for notification
+                var jsonElement = (JsonElement)data;
+                if (jsonElement.TryGetProperty("Emails", out var emailsProperty))
+                {
+                    NewEmailCount += emailsProperty.GetArrayLength();
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        });
+
+        hubConnection.On<object>("ParsingStatusUpdated", async (data) =>
+        {
+            await InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+    }
+
+    private async Task JoinSessionGroup()
+    {
+        if (hubConnection != null && !string.IsNullOrEmpty(SessionId))
+        {
+            await hubConnection.InvokeAsync("JoinSessionGroup", SessionId);
+        }
+    }
+
+    private async Task RefreshEmails()
+    {
+        if (string.IsNullOrEmpty(SessionId))
+            return;
+
+        IsLoading = true;
+        NewEmailCount = 0;
+        StateHasChanged();
+
+        try
+        {
+            var response = await UploadService.GetParsedEmails(SessionId, CurrentPage, PageSize);
+            if (response != null)
+            {
+                Emails = response.Emails;
+                TotalEmailCount = response.TotalCount;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error refreshing emails: {ex.Message}");
+        }
+        finally
+        {
+            IsLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ChangePage(int newPage)
+    {
+        if (newPage >= 1 && newPage <= TotalPages && newPage != CurrentPage)
+        {
+            CurrentPage = newPage;
+            await RefreshEmails();
+        }
+    }
+
+    private async Task SelectEmail(ParsedEmailInfo email)
+    {
+        SelectedEmail = email;
+        SelectedEmailIndex = email.Index;
+        await OnEmailSelected.InvokeAsync(email);
+        StateHasChanged();
+    }
+
+    private void CloseEmailDetail()
+    {
+        SelectedEmail = null;
+        SelectedEmailIndex = -1;
+        StateHasChanged();
+    }
+
+    private async Task ToggleRealTime()
+    {
+        IsRealTimeEnabled = !IsRealTimeEnabled;
+        if (IsRealTimeEnabled && NewEmailCount > 0)
+        {
+            await RefreshEmails();
+        }
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection != null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}
