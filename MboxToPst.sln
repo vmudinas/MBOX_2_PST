@@ -5,6 +5,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MboxToPstConverter", "MboxToPstConverter\MboxToPstConverter.csproj", "{B39EE47F-3365-4146-86CC-E605C7AF2C61}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MboxToPstBlazorApp", "MboxToPstBlazorApp\MboxToPstBlazorApp.csproj", "{7D902BFF-9694-46FD-A76E-B7973E67DDEC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{B39EE47F-3365-4146-86CC-E605C7AF2C61}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{B39EE47F-3365-4146-86CC-E605C7AF2C61}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{B39EE47F-3365-4146-86CC-E605C7AF2C61}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7D902BFF-9694-46FD-A76E-B7973E67DDEC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7D902BFF-9694-46FD-A76E-B7973E67DDEC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7D902BFF-9694-46FD-A76E-B7973E67DDEC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7D902BFF-9694-46FD-A76E-B7973E67DDEC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

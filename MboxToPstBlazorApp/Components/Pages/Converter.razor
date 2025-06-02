@@ -1,0 +1,718 @@
+@page "/converter"
+@using MboxToPstBlazorApp.Services
+@using Microsoft.AspNetCore.Components
+@inject EmailService EmailService
+@rendermode InteractiveServer
+
+<PageTitle>Email Converter</PageTitle>
+
+<h1>Email Format Converter</h1>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Conversion Settings</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="inputPath" class="form-label">Input File:</label>
+                    <div class="row">
+                        <div class="col-md-8">
+                            <input type="text" class="form-control" id="inputPath" @bind="inputPath" placeholder="Enter path to MBOX or PST file (e.g., /path/to/file.mbox)" />
+                        </div>
+                        <div class="col-md-4">
+                            <div class="d-grid">
+                                <label class="btn btn-outline-primary" for="inputFileUpload">Upload File</label>
+                            </div>
+                        </div>
+                    </div>
+                    <InputFile id="inputFileUpload" class="d-none" OnChange="OnInputFileUploaded" accept=".mbox,.pst" />
+                    <small class="form-text text-muted">Supported formats: .mbox, .pst. Enter a file path or upload a file.</small>
+                </div>
+
+                <div class="mb-3">
+                    <label for="outputPath" class="form-label">Output File Path:</label>
+                    <input type="text" class="form-control" id="outputPath" @bind="outputPath" placeholder="Enter path for converted file (e.g., /path/to/converted.pst)" />
+                    <small class="form-text text-muted">File extension determines conversion direction (.mbox → .pst or .pst → .mbox). Ensure the directory exists and is writable.</small>
+                </div>
+
+                <div class="mb-3">
+                    <button class="btn btn-primary me-2" @onclick="StartConversion" disabled="@isConverting">
+                        @if (isConverting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            <text>Converting...</text>
+                        }
+                        else
+                        {
+                            <text>Convert</text>
+                        }
+                    </button>
+                    <button class="btn btn-secondary me-2" @onclick="LoadEmails" disabled="@isLoading">
+                        @if (isLoading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            <text>Loading...</text>
+                        }
+                        else
+                        {
+                            <text>Load Emails</text>
+                        }
+                    </button>
+                    @if (hasConvertedFile && !string.IsNullOrEmpty(convertedFilePath))
+                    {
+                        <a class="btn btn-success" href="/download?file=@Uri.EscapeDataString(convertedFilePath)" target="_blank">
+                            <i class="fas fa-download"></i> Download Converted File
+                        </a>
+                    }
+                </div>
+
+                @if (!string.IsNullOrEmpty(statusMessage))
+                {
+                    <div class="alert @statusAlertClass">
+                        @statusMessage
+                    </div>
+                }
+
+                @if (isConverting)
+                {
+                    <div class="mb-3">
+                        <div class="progress">
+                            <div class="progress-bar" role="progressbar" style="width: @(conversionProgress)%" aria-valuenow="@conversionProgress" aria-valuemin="0" aria-valuemax="100">
+                                @conversionProgress%
+                            </div>
+                        </div>
+                        <small class="text-muted">@progressMessage</small>
+                    </div>
+                }
+
+                @if (isLoading)
+                {
+                    <div class="mb-3">
+                        <div class="progress">
+                            <div class="progress-bar bg-info" role="progressbar" style="width: @(loadingProgress)%" aria-valuenow="@loadingProgress" aria-valuemin="0" aria-valuemax="100">
+                                @loadingProgress%
+                            </div>
+                        </div>
+                        <small class="text-muted">@loadingMessage</small>
+                    </div>
+                }
+
+                @if (isUploading)
+                {
+                    <div class="mb-3">
+                        <div class="progress">
+                            <div class="progress-bar bg-warning" role="progressbar" style="width: @(uploadProgress)%" aria-valuenow="@uploadProgress" aria-valuemin="0" aria-valuemax="100">
+                                @uploadProgress%
+                            </div>
+                        </div>
+                        <small class="text-muted">Uploading file...</small>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Email Preview</h5>
+                @if (emails != null && emails.Count > 0)
+                {
+                    <div class="mt-2">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text">🔍</span>
+                            <input type="text" class="form-control" placeholder="Search emails (subject, from, to, body)..." 
+                                   @bind="searchTerm" @oninput="OnSearchInput" />
+                            @if (!string.IsNullOrEmpty(searchTerm))
+                            {
+                                <button class="btn btn-outline-secondary" type="button" @onclick="ClearSearch">
+                                    ✕
+                                </button>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="card-body">
+                @if (emails != null && emails.Count > 0)
+                {
+                    <div class="mb-3">
+                        @if (!string.IsNullOrEmpty(searchTerm))
+                        {
+                            if (filteredEmails.Count > 0)
+                            {
+                                <small class="text-muted">Found @filteredEmails.Count email(s) matching "@searchTerm"</small>
+                            }
+                            else
+                            {
+                                <small class="text-warning">No emails found matching "@searchTerm"</small>
+                            }
+                        }
+                        else
+                        {
+                            if (totalEmailCount > emails.Count)
+                            {
+                                <small class="text-muted">Found @emails.Count preview emails of @totalEmailCount total</small>
+                            }
+                            else
+                            {
+                                <small class="text-muted">Found @emails.Count emails total</small>
+                            }
+                        }
+                        
+                        @if (totalPreviewPages > 1)
+                        {
+                            <div class="mt-2">
+                                <small class="text-muted">
+                                    Page @currentPreviewPage of @totalPreviewPages 
+                                    (showing @Math.Min(previewPageSize, GetEmailsToDisplay().Count - (currentPreviewPage - 1) * previewPageSize) emails)
+                                </small>
+                            </div>
+                        }
+                    </div>
+                    <div style="max-height: 400px; overflow-y: auto;">
+                        @{
+                            var emailsToDisplay = GetPagedEmails();
+                        }
+                        @foreach (var email in emailsToDisplay)
+                        {
+                            <div class="card mb-2" style="cursor: pointer;" @onclick="() => SelectEmail(email)">
+                                <div class="card-body p-2">
+                                    <h6 class="card-title mb-1">@HighlightSearchTerm(email.Subject)</h6>
+                                    <p class="card-text small mb-1">
+                                        <strong>From:</strong> @HighlightSearchTerm(email.From)<br />
+                                        <strong>To:</strong> @HighlightSearchTerm(email.To)<br />
+                                        <strong>Date:</strong> @email.Date.ToString("yyyy-MM-dd HH:mm")
+                                        @if (email.HasAttachments)
+                                        {
+                                            <span class="badge bg-secondary ms-2">📎</span>
+                                        }
+                                    </p>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                    
+                    @if (totalPreviewPages > 1)
+                    {
+                        <div class="mt-3">
+                            <nav aria-label="Email preview pagination">
+                                <ul class="pagination pagination-sm justify-content-center">
+                                    <li class="page-item @(currentPreviewPage == 1 ? "disabled" : "")">
+                                        <button class="page-link" @onclick="PreviousPreviewPage" disabled="@(currentPreviewPage == 1)">Previous</button>
+                                    </li>
+                                    
+                                    @for (int i = Math.Max(1, currentPreviewPage - 2); i <= Math.Min(totalPreviewPages, currentPreviewPage + 2); i++)
+                                    {
+                                        var pageNum = i; // Capture loop variable
+                                        <li class="page-item @(pageNum == currentPreviewPage ? "active" : "")">
+                                            <button class="page-link" @onclick="() => GoToPreviewPage(pageNum)">@pageNum</button>
+                                        </li>
+                                    }
+                                    
+                                    <li class="page-item @(currentPreviewPage == totalPreviewPages ? "disabled" : "")">
+                                        <button class="page-link" @onclick="NextPreviewPage" disabled="@(currentPreviewPage == totalPreviewPages)">Next</button>
+                                    </li>
+                                </ul>
+                            </nav>
+                        </div>
+                    }
+                }
+                else if (!string.IsNullOrEmpty(inputPath))
+                {
+                    <p class="text-muted">Click "Load Emails" to preview emails from the selected file.</p>
+                }
+                else
+                {
+                    <p class="text-muted">Enter a file path to preview emails.</p>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (eventLog.Any())
+{
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Event Log / Progress Log</h5>
+                </div>
+                <div class="card-body">
+                    <div style="max-height: 200px; overflow-y: auto; background-color: #f8f9fa; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 0.85em;">
+                        @foreach (var logEntry in eventLog.AsEnumerable().Reverse())
+                        {
+                            <div>@logEntry</div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (selectedEmail != null)
+{
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Selected Email Details</h5>
+                </div>
+                <div class="card-body">
+                    <h6>@selectedEmail.Subject</h6>
+                    <p><strong>From:</strong> @selectedEmail.From</p>
+                    <p><strong>To:</strong> @selectedEmail.To</p>
+                    <p><strong>Date:</strong> @selectedEmail.Date.ToString("yyyy-MM-dd HH:mm:ss")</p>
+                    <hr />
+                    <div style="max-height: 300px; overflow-y: auto; background-color: #f8f9fa; padding: 10px; border-radius: 5px;">
+                        <pre style="white-space: pre-wrap;">@selectedEmail.Body</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private string inputPath = "";
+    private string outputPath = "";
+    private List<EmailSummary>? emails;
+    private EmailSummary? selectedEmail;
+    private bool isLoading = false;
+    private bool isConverting = false;
+    private string statusMessage = "";
+    private string statusAlertClass = "";
+    private int conversionProgress = 0;
+    private string progressMessage = "";
+    private int loadingProgress = 0;
+    private string loadingMessage = "";
+    private List<string> eventLog = new List<string>();
+    private int totalEmailCount = 0;
+    private string searchTerm = "";
+    private List<EmailSummary> filteredEmails = new List<EmailSummary>();
+    private bool hasConvertedFile = false;
+    private string? convertedFilePath = null;
+    private bool isUploading = false;
+    private int uploadProgress = 0;
+    
+    // Pagination for email preview
+    private int currentPreviewPage = 1;
+    private int previewPageSize = 50;
+    private int totalPreviewPages => GetEmailsToDisplay().Count > 0 ? (int)Math.Ceiling((double)GetEmailsToDisplay().Count / previewPageSize) : 0;
+
+    private async Task LoadEmails()
+    {
+        if (string.IsNullOrWhiteSpace(inputPath))
+        {
+            SetStatusMessage("Please enter an input file path.", "alert-warning");
+            return;
+        }
+
+        if (!File.Exists(inputPath))
+        {
+            SetStatusMessage("Input file not found.", "alert-danger");
+            return;
+        }
+
+        isLoading = true;
+        selectedEmail = null;
+        emails = null;
+        totalEmailCount = 0;
+        searchTerm = "";
+        filteredEmails = new List<EmailSummary>();
+        currentPreviewPage = 1;  // Reset pagination
+        eventLog.Clear();
+        loadingProgress = 0;
+        loadingMessage = "Preparing to load emails...";
+
+        AddToEventLog("Starting email loading process...");
+
+        try
+        {
+            var extension = Path.GetExtension(inputPath).ToLowerInvariant();
+
+            var progress = new Progress<EmailLoadingProgress>(p =>
+            {
+                loadingMessage = p.Message;
+                if (p.EmailCount > 0)
+                {
+                    // For large files, we can't easily calculate exact percentage
+                    // so we'll show progress based on message count
+                    var estimatedProgress = Math.Min(90, p.EmailCount / 100); // Cap at 90% during loading
+                    loadingProgress = estimatedProgress;
+                }
+                AddToEventLog(p.Message);
+                InvokeAsync(StateHasChanged);
+            });
+
+            if (extension == ".mbox")
+            {
+                // Use metadata approach for large files to avoid memory issues during preview
+                var fileInfo = new FileInfo(inputPath);
+                var fileSizeMB = fileInfo.Length / 1024.0 / 1024.0;
+                
+                AddToEventLog($"Loading preview of emails from MBOX file ({fileSizeMB:F2} MB)...");
+                
+                var metadata = await EmailService.GetEmailMetadataFromMboxAsync(inputPath, progress);
+                emails = metadata.PreviewEmails;
+                totalEmailCount = metadata.TotalEmailCount;
+                
+                if (metadata.TotalEmailCount > metadata.PreviewEmails.Count)
+                {
+                    SetStatusMessage($"Successfully loaded {emails.Count} preview emails of {totalEmailCount} total emails.", "alert-success");
+                    AddToEventLog($"Preview loading completed. Showing {emails.Count} emails of {totalEmailCount} total.");
+                }
+                else
+                {
+                    SetStatusMessage($"Successfully loaded all {emails.Count} emails.", "alert-success");
+                    AddToEventLog($"Loading completed. Total emails: {emails.Count}");
+                }
+            }
+            else if (extension == ".pst")
+            {
+                // Use metadata approach for large files to avoid memory issues during preview  
+                var fileInfo = new FileInfo(inputPath);
+                var fileSizeMB = fileInfo.Length / 1024.0 / 1024.0;
+                
+                AddToEventLog($"Loading preview of emails from PST file ({fileSizeMB:F2} MB)...");
+                
+                var metadata = await EmailService.GetEmailMetadataFromPstAsync(inputPath, progress);
+                emails = metadata.PreviewEmails;
+                totalEmailCount = metadata.TotalEmailCount;
+                
+                if (metadata.TotalEmailCount > metadata.PreviewEmails.Count)
+                {
+                    SetStatusMessage($"Successfully loaded {emails.Count} preview emails of {totalEmailCount} total emails.", "alert-success");
+                    AddToEventLog($"Preview loading completed. Showing {emails.Count} emails of {totalEmailCount} total.");
+                }
+                else
+                {
+                    SetStatusMessage($"Successfully loaded all {emails.Count} emails.", "alert-success");
+                    AddToEventLog($"Loading completed. Total emails: {emails.Count}");
+                }
+            }
+            else
+            {
+                SetStatusMessage("Unsupported file format. Please use .mbox or .pst files.", "alert-warning");
+                return;
+            }
+
+            loadingProgress = 100;
+            loadingMessage = "Loading completed!";
+        }
+        catch (Exception ex)
+        {
+            SetStatusMessage($"Error loading emails: {ex.Message}", "alert-danger");
+            AddToEventLog($"Error loading emails: {ex.Message}");
+            emails = null;
+            totalEmailCount = 0;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task StartConversion()
+    {
+        if (string.IsNullOrWhiteSpace(inputPath))
+        {
+            SetStatusMessage("Please enter an input file path.", "alert-warning");
+            return;
+        }
+
+        if (!File.Exists(inputPath))
+        {
+            SetStatusMessage("Input file not found.", "alert-danger");
+            return;
+        }
+
+        var inputExt = Path.GetExtension(inputPath).ToLowerInvariant();
+        
+        // Auto-generate output path if not specified
+        if (string.IsNullOrWhiteSpace(outputPath))
+        {
+            var inputDir = Path.GetDirectoryName(inputPath) ?? Directory.GetCurrentDirectory();
+            var inputFileName = Path.GetFileNameWithoutExtension(inputPath);
+            var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            
+            // Determine target extension based on input
+            var targetExt = inputExt == ".mbox" ? ".pst" : ".mbox";
+            
+            outputPath = Path.Combine(inputDir, $"{timestamp}_{inputFileName}{targetExt}");
+            
+            SetStatusMessage($"Auto-generated output path: {outputPath}", "alert-info");
+            AddToEventLog($"Auto-generated output path: {outputPath}");
+        }
+        
+        var outputExt = Path.GetExtension(outputPath).ToLowerInvariant();
+
+        if (!((inputExt == ".mbox" && outputExt == ".pst") || (inputExt == ".pst" && outputExt == ".mbox")))
+        {
+            SetStatusMessage("Unsupported conversion. Supported: .mbox to .pst or .pst to .mbox", "alert-warning");
+            return;
+        }
+
+        isConverting = true;
+        conversionProgress = 0;
+        progressMessage = "Preparing conversion...";
+
+        AddToEventLog($"Starting conversion from {inputExt} to {outputExt}");
+        AddToEventLog($"Input file: {Path.GetFileName(inputPath)}");
+        AddToEventLog($"Output file: {Path.GetFileName(outputPath)}");
+
+        var progress = new Progress<ConversionProgress>(p =>
+        {
+            conversionProgress = p.ProgressPercentage;
+            progressMessage = p.Message;
+            AddToEventLog(p.Message);
+            InvokeAsync(StateHasChanged);
+        });
+
+        try
+        {
+            ConversionResult result;
+
+            if (inputExt == ".mbox" && outputExt == ".pst")
+            {
+                result = await EmailService.ConvertMboxToPstAsync(inputPath, outputPath, progress);
+            }
+            else
+            {
+                result = await EmailService.ConvertPstToMboxAsync(inputPath, outputPath, progress);
+            }
+
+            if (result.Success)
+            {
+                SetStatusMessage(result.Message, "alert-success");
+                AddToEventLog($"Conversion completed successfully: {result.Message}");
+                
+                // Track converted file for download
+                if (File.Exists(outputPath))
+                {
+                    hasConvertedFile = true;
+                    convertedFilePath = outputPath;
+                }
+            }
+            else
+            {
+                SetStatusMessage($"Conversion failed: {result.Message}", "alert-danger");
+                AddToEventLog($"Conversion failed: {result.Message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            SetStatusMessage($"Conversion error: {ex.Message}", "alert-danger");
+            AddToEventLog($"Conversion error: {ex.Message}");
+        }
+        finally
+        {
+            isConverting = false;
+        }
+    }
+
+    private void SelectEmail(EmailSummary email)
+    {
+        selectedEmail = email;
+    }
+
+    private void SetStatusMessage(string message, string alertClass)
+    {
+        statusMessage = message;
+        statusAlertClass = alertClass;
+    }
+
+    private void AddToEventLog(string message)
+    {
+        var timestamp = DateTime.Now.ToString("HH:mm:ss");
+        eventLog.Add($"[{timestamp}] {message}");
+        
+        // Keep only the last 50 log entries to prevent memory issues
+        if (eventLog.Count > 50)
+        {
+            eventLog.RemoveAt(0);
+        }
+    }
+
+    private void OnSearchInput(ChangeEventArgs e)
+    {
+        searchTerm = e.Value?.ToString() ?? "";
+        FilterEmails();
+    }
+
+    private void ClearSearch()
+    {
+        searchTerm = "";
+        FilterEmails();
+    }
+
+    private void FilterEmails()
+    {
+        if (emails == null)
+        {
+            filteredEmails = new List<EmailSummary>();
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            filteredEmails = new List<EmailSummary>();
+            return;
+        }
+
+        var searchTermLower = searchTerm.ToLowerInvariant();
+        filteredEmails = emails.Where(email =>
+            (email.Subject?.ToLowerInvariant().Contains(searchTermLower) == true) ||
+            (email.From?.ToLowerInvariant().Contains(searchTermLower) == true) ||
+            (email.To?.ToLowerInvariant().Contains(searchTermLower) == true) ||
+            (email.Body?.ToLowerInvariant().Contains(searchTermLower) == true)
+        ).ToList();
+
+        // Reset to first page when filtering
+        currentPreviewPage = 1;
+        StateHasChanged();
+    }
+
+    private List<EmailSummary> GetEmailsToDisplay()
+    {
+        return !string.IsNullOrEmpty(searchTerm) ? filteredEmails : emails ?? new List<EmailSummary>();
+    }
+
+    private List<EmailSummary> GetPagedEmails()
+    {
+        var emailsToDisplay = GetEmailsToDisplay();
+        var startIndex = (currentPreviewPage - 1) * previewPageSize;
+        return emailsToDisplay.Skip(startIndex).Take(previewPageSize).ToList();
+    }
+
+    private void PreviousPreviewPage()
+    {
+        if (currentPreviewPage > 1)
+        {
+            currentPreviewPage--;
+            selectedEmail = null;
+            StateHasChanged();
+        }
+    }
+
+    private void NextPreviewPage()
+    {
+        if (currentPreviewPage < totalPreviewPages)
+        {
+            currentPreviewPage++;
+            selectedEmail = null;
+            StateHasChanged();
+        }
+    }
+
+    private void GoToPreviewPage(int page)
+    {
+        currentPreviewPage = page;
+        selectedEmail = null;
+        StateHasChanged();
+    }
+
+    private MarkupString HighlightSearchTerm(string? text)
+    {
+        if (string.IsNullOrEmpty(text) || string.IsNullOrWhiteSpace(searchTerm))
+        {
+            return new MarkupString(System.Web.HttpUtility.HtmlEncode(text ?? ""));
+        }
+
+        var escapedText = System.Web.HttpUtility.HtmlEncode(text);
+        var escapedSearchTerm = System.Web.HttpUtility.HtmlEncode(searchTerm);
+        
+        // Case-insensitive replacement with highlighting
+        var highlightedText = System.Text.RegularExpressions.Regex.Replace(
+            escapedText,
+            System.Text.RegularExpressions.Regex.Escape(escapedSearchTerm),
+            $"<mark class=\"bg-warning\">{escapedSearchTerm}</mark>",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        return new MarkupString(highlightedText);
+    }
+
+    private async Task OnInputFileUploaded(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file != null)
+        {
+            try
+            {
+                isUploading = true;
+                uploadProgress = 0;
+                SetStatusMessage($"Uploading {file.Name}...", "alert-info");
+                AddToEventLog($"Starting upload of {file.Name} ({file.Size / 1024.0 / 1024.0:F2} MB)");
+                
+                // Create uploads directory if it doesn't exist
+                var uploadsDir = Path.Combine(Directory.GetCurrentDirectory(), "uploads");
+                Directory.CreateDirectory(uploadsDir);
+                
+                // Create file path
+                var fileName = Path.GetFileName(file.Name);
+                var filePath = Path.Combine(uploadsDir, fileName);
+                
+                // Save uploaded file with streaming for large files
+                await SaveFileWithStreaming(file, filePath);
+                
+                inputPath = filePath;
+                SetStatusMessage($"Successfully uploaded {file.Name}. File saved to: {filePath}", "alert-success");
+                AddToEventLog($"Upload completed: {filePath}");
+                
+                // Force UI update to show the new input path
+                await InvokeAsync(StateHasChanged);
+            }
+            catch (Exception ex)
+            {
+                SetStatusMessage($"Upload failed: {ex.Message}", "alert-danger");
+                AddToEventLog($"Upload failed: {ex.Message}");
+            }
+            finally
+            {
+                isUploading = false;
+                uploadProgress = 0;
+            }
+        }
+    }
+
+    private async Task SaveFileWithStreaming(IBrowserFile file, string filePath)
+    {
+        const int bufferSize = 1024 * 1024; // 1MB buffer
+        var totalBytes = file.Size;
+        var bytesRead = 0L;
+        var lastProgress = 0;
+
+        using var stream = file.OpenReadStream(maxAllowedSize: 50L * 1024 * 1024 * 1024); // 50GB max
+        using var fileStream = new FileStream(filePath, FileMode.Create);
+        
+        var buffer = new byte[bufferSize];
+        int currentBytesRead;
+        
+        while ((currentBytesRead = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+        {
+            await fileStream.WriteAsync(buffer, 0, currentBytesRead);
+            bytesRead += currentBytesRead;
+            
+            // Update progress every ~2%
+            var currentProgress = (int)((bytesRead * 100) / totalBytes);
+            if (currentProgress >= lastProgress + 2)
+            {
+                lastProgress = currentProgress;
+                uploadProgress = currentProgress;
+                SetStatusMessage($"Uploading {file.Name}... {currentProgress}%", "alert-info");
+                AddToEventLog($"Upload progress: {bytesRead / 1024.0 / 1024.0:F2} MB / {totalBytes / 1024.0 / 1024.0:F2} MB ({currentProgress}%)");
+                await InvokeAsync(StateHasChanged);
+                
+                // Small delay to prevent UI freezing
+                await Task.Delay(10);
+            }
+        }
+        
+        uploadProgress = 100;
+        await InvokeAsync(StateHasChanged);
+    }
+}

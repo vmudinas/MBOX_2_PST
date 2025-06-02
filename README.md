@@ -1,13 +1,15 @@
 # MBOX_2_PST
 Mbox to pst converter
 
-A .NET console application for converting between MBOX and PST formats bidirectionally.
+A .NET solution for converting MBOX files to PST format with both console and web UI interfaces.
 
 ## Features
 
 - .NET console application that converts between MBOX and PST formats **bidirectionally**
+- .NET Blazor web application for email conversion with a user-friendly interface
 - Uses MimeKit for MBOX parsing and Aspose.Email for PST creation/reading
 - Command-line interface for easy automation
+- Web-based user interface for interactive email conversion
 - Preserves email metadata, attachments, and formatting
 
 ## Console Application
@@ -150,8 +152,33 @@ If no messages are being processed:
 - MimeKit - for parsing MBOX files
 - Aspose.Email - for creating PST files
 
+## Blazor Web Application
+
+### Features
+
+- Cross-platform web-based user interface
+- Interactive file selection for input and output paths  
+- Real-time conversion progress display
+- Email preview functionality for converted files
+- **File upload support**: Upload files with progress tracking
+- **Download functionality**: Secure download links for converted files
+
+### Requirements
+
+- .NET 8.0 or later
+
+### Usage
+
+```bash
+cd MboxToPstBlazorApp
+dotnet run
+```
+
+Then open https://localhost:5001 (or the URL shown in the console) in your web browser to access the conversion interface.
+
 ### Building
 
+**Entire Solution:**
 ```bash
 dotnet build
 ```
@@ -159,6 +186,12 @@ dotnet build
 **Console Application:**
 ```bash
 cd MboxToPstConverter
+dotnet build
+```
+
+**Blazor Web Application:**
+```bash
+cd MboxToPstBlazorApp
 dotnet build
 ```
 
