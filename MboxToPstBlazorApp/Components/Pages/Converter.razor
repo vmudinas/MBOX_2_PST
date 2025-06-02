@@ -152,7 +152,14 @@
                         }
                         else
                         {
-                            <small class="text-muted">Found @emails.Count emails total</small>
+                            if (totalEmailCount > emails.Count)
+                            {
+                                <small class="text-muted">Found @emails.Count preview emails of @totalEmailCount total</small>
+                            }
+                            else
+                            {
+                                <small class="text-muted">Found @emails.Count emails total</small>
+                            }
                         }
                         
                         @if (totalPreviewPages > 1)
@@ -344,31 +351,49 @@
 
             if (extension == ".mbox")
             {
-                // Always load all emails as requested - no preview limitation
+                // Use metadata approach for large files to avoid memory issues during preview
                 var fileInfo = new FileInfo(inputPath);
                 var fileSizeMB = fileInfo.Length / 1024.0 / 1024.0;
                 
-                AddToEventLog($"Loading all emails from MBOX file ({fileSizeMB:F2} MB)...");
+                AddToEventLog($"Loading preview of emails from MBOX file ({fileSizeMB:F2} MB)...");
                 
-                emails = await EmailService.GetEmailsFromMboxAsync(inputPath, progress);
-                totalEmailCount = emails.Count;
+                var metadata = await EmailService.GetEmailMetadataFromMboxAsync(inputPath, progress);
+                emails = metadata.PreviewEmails;
+                totalEmailCount = metadata.TotalEmailCount;
                 
-                SetStatusMessage($"Successfully loaded {emails.Count} emails.", "alert-success");
-                AddToEventLog($"Loading completed. Total emails: {emails.Count}");
+                if (metadata.TotalEmailCount > metadata.PreviewEmails.Count)
+                {
+                    SetStatusMessage($"Successfully loaded {emails.Count} preview emails of {totalEmailCount} total emails.", "alert-success");
+                    AddToEventLog($"Preview loading completed. Showing {emails.Count} emails of {totalEmailCount} total.");
+                }
+                else
+                {
+                    SetStatusMessage($"Successfully loaded all {emails.Count} emails.", "alert-success");
+                    AddToEventLog($"Loading completed. Total emails: {emails.Count}");
+                }
             }
             else if (extension == ".pst")
             {
-                // Always load all emails as requested - no preview limitation  
+                // Use metadata approach for large files to avoid memory issues during preview  
                 var fileInfo = new FileInfo(inputPath);
                 var fileSizeMB = fileInfo.Length / 1024.0 / 1024.0;
                 
-                AddToEventLog($"Loading all emails from PST file ({fileSizeMB:F2} MB)...");
+                AddToEventLog($"Loading preview of emails from PST file ({fileSizeMB:F2} MB)...");
                 
-                emails = await EmailService.GetEmailsFromPstAsync(inputPath);
-                totalEmailCount = emails.Count;
+                var metadata = await EmailService.GetEmailMetadataFromPstAsync(inputPath, progress);
+                emails = metadata.PreviewEmails;
+                totalEmailCount = metadata.TotalEmailCount;
                 
-                SetStatusMessage($"Successfully loaded {emails.Count} emails.", "alert-success");
-                AddToEventLog($"Loading completed. Total emails: {emails.Count}");
+                if (metadata.TotalEmailCount > metadata.PreviewEmails.Count)
+                {
+                    SetStatusMessage($"Successfully loaded {emails.Count} preview emails of {totalEmailCount} total emails.", "alert-success");
+                    AddToEventLog($"Preview loading completed. Showing {emails.Count} emails of {totalEmailCount} total.");
+                }
+                else
+                {
+                    SetStatusMessage($"Successfully loaded all {emails.Count} emails.", "alert-success");
+                    AddToEventLog($"Loading completed. Total emails: {emails.Count}");
+                }
             }
             else
             {

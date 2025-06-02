@@ -42,29 +42,15 @@ public class MboxParser
         var parser = new MimeParser(stream, MimeFormat.Mbox);
 
         int messageCount = 0;
-        var messages = new List<MimeMessage>();
         int skippedCount = 0;
         
         while (!parser.IsEndOfStream)
         {
+            MimeMessage? message = null;
+            
             try
             {
-                var message = parser.ParseMessage();
-                if (message != null)
-                {
-                    messages.Add(message);
-                    messageCount++;
-                    if (messageCount % 50 == 0)
-                    {
-                        Console.WriteLine($"Parsed {messageCount} messages...");
-                        progress?.Report(new MboxParsingProgress 
-                        { 
-                            Message = $"Parsed {messageCount} messages...", 
-                            MessageCount = messageCount,
-                            FileSizeMB = fileSizeInMB
-                        });
-                    }
-                }
+                message = parser.ParseMessage();
             }
             catch (Exception ex)
             {
@@ -73,6 +59,25 @@ public class MboxParser
                 Console.WriteLine($"Skipped malformed message at index {messageCount + skippedCount}: {ex.Message}");
                 
                 // Continue parsing - MimeParser should handle recovery automatically
+                continue;
+            }
+            
+            if (message != null)
+            {
+                messageCount++;
+                if (messageCount % 50 == 0)
+                {
+                    Console.WriteLine($"Parsed {messageCount} messages...");
+                    progress?.Report(new MboxParsingProgress 
+                    { 
+                        Message = $"Parsed {messageCount} messages...", 
+                        MessageCount = messageCount,
+                        FileSizeMB = fileSizeInMB
+                    });
+                }
+                
+                // Yield immediately for true streaming
+                yield return message;
             }
         }
         
@@ -85,12 +90,6 @@ public class MboxParser
             FileSizeMB = fileSizeInMB,
             IsCompleted = true
         });
-        
-        // Now yield all successfully parsed messages
-        foreach (var message in messages)
-        {
-            yield return message;
-        }
     }
 
     public async Task<int> CountMboxMessagesAsync(string mboxFilePath, IProgress<MboxParsingProgress>? progress = null)
