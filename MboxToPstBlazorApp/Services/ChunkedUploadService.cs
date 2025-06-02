@@ -8,11 +8,26 @@ namespace MboxToPstBlazorApp.Services
     public class ChunkedUploadService
     {
         private readonly HttpClient _httpClient;
+        private readonly IHttpContextAccessor _httpContextAccessor;
         private const int CHUNK_SIZE = 1024 * 1024; // 1MB chunks
 
-        public ChunkedUploadService(HttpClient httpClient)
+        public ChunkedUploadService(HttpClient httpClient, IHttpContextAccessor httpContextAccessor)
         {
             _httpClient = httpClient;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private string GetBaseUrl()
+        {
+            var context = _httpContextAccessor.HttpContext;
+            if (context?.Request != null)
+            {
+                var scheme = context.Request.Scheme;
+                var host = context.Request.Host;
+                return $"{scheme}://{host}";
+            }
+            // Fallback for development
+            return "https://localhost:7160";
         }
 
         public async Task<string> CreateUploadSession(string fileName, long totalSize)
@@ -21,7 +36,8 @@ namespace MboxToPstBlazorApp.Services
             var json = JsonSerializer.Serialize(request);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            var response = await _httpClient.PostAsync("/api/upload/session", content);
+            var baseUrl = GetBaseUrl();
+            var response = await _httpClient.PostAsync($"{baseUrl}/api/upload/session", content);
             response.EnsureSuccessStatusCode();
 
             var responseJson = await response.Content.ReadAsStringAsync();
@@ -97,7 +113,8 @@ namespace MboxToPstBlazorApp.Services
             form.Add(new StringContent(isLastChunk.ToString()), "IsLastChunk");
             form.Add(new ByteArrayContent(chunkData), "ChunkFile", "chunk.dat");
 
-            var response = await _httpClient.PostAsync("/api/upload/chunk", form);
+            var baseUrl = GetBaseUrl();
+            var response = await _httpClient.PostAsync($"{baseUrl}/api/upload/chunk", form);
             var responseJson = await response.Content.ReadAsStringAsync();
 
             if (response.IsSuccessStatusCode)
@@ -121,7 +138,8 @@ namespace MboxToPstBlazorApp.Services
         {
             try
             {
-                var response = await _httpClient.GetAsync($"/api/upload/session/{sessionId}");
+                var baseUrl = GetBaseUrl();
+                var response = await _httpClient.GetAsync($"{baseUrl}/api/upload/session/{sessionId}");
                 if (response.IsSuccessStatusCode)
                 {
                     var json = await response.Content.ReadAsStringAsync();
@@ -142,7 +160,8 @@ namespace MboxToPstBlazorApp.Services
         {
             try
             {
-                var response = await _httpClient.GetAsync($"/api/upload/session/{sessionId}/emails?page={page}&pageSize={pageSize}");
+                var baseUrl = GetBaseUrl();
+                var response = await _httpClient.GetAsync($"{baseUrl}/api/upload/session/{sessionId}/emails?page={page}&pageSize={pageSize}");
                 if (response.IsSuccessStatusCode)
                 {
                     var json = await response.Content.ReadAsStringAsync();
@@ -163,7 +182,8 @@ namespace MboxToPstBlazorApp.Services
         {
             try
             {
-                var response = await _httpClient.DeleteAsync($"/api/upload/session/{sessionId}");
+                var baseUrl = GetBaseUrl();
+                var response = await _httpClient.DeleteAsync($"{baseUrl}/api/upload/session/{sessionId}");
                 return response.IsSuccessStatusCode;
             }
             catch
@@ -176,7 +196,8 @@ namespace MboxToPstBlazorApp.Services
         {
             try
             {
-                var response = await _httpClient.GetAsync("/api/upload/sessions");
+                var baseUrl = GetBaseUrl();
+                var response = await _httpClient.GetAsync($"{baseUrl}/api/upload/sessions");
                 if (response.IsSuccessStatusCode)
                 {
                     var json = await response.Content.ReadAsStringAsync();
