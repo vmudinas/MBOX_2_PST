@@ -10,6 +10,9 @@ builder.Services.AddRazorComponents()
 // Add API controllers for upload endpoints
 builder.Services.AddControllers();
 
+// Add SignalR for real-time updates
+builder.Services.AddSignalR();
+
 // Configure form options for large file uploads
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
 {
@@ -61,6 +64,9 @@ app.MapRazorComponents<App>()
 
 // Map API controllers
 app.MapControllers();
+
+// Map SignalR hubs
+app.MapHub<MboxToPstBlazorApp.Hubs.EmailParsingHub>("/emailHub");
 
 // Add download endpoint for converted files
 app.MapGet("/download", async (HttpContext context, string file) =>

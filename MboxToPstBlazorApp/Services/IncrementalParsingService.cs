@@ -1,5 +1,7 @@
 using MboxToPstConverter;
 using MboxToPstBlazorApp.Models;
+using MboxToPstBlazorApp.Hubs;
+using Microsoft.AspNetCore.SignalR;
 using MimeKit;
 
 namespace MboxToPstBlazorApp.Services
@@ -8,15 +10,18 @@ namespace MboxToPstBlazorApp.Services
     {
         private readonly MboxParser _mboxParser;
         private readonly UploadSessionService _sessionService;
+        private readonly IHubContext<EmailParsingHub> _hubContext;
         private readonly Dictionary<string, long> _sessionParsePositions;
         private readonly ILogger<IncrementalParsingService> _logger;
 
         public IncrementalParsingService(
             UploadSessionService sessionService, 
+            IHubContext<EmailParsingHub> hubContext,
             ILogger<IncrementalParsingService> logger)
         {
             _mboxParser = new MboxParser();
             _sessionService = sessionService;
+            _hubContext = hubContext;
             _sessionParsePositions = new Dictionary<string, long>();
             _logger = logger;
             
@@ -69,6 +74,7 @@ namespace MboxToPstBlazorApp.Services
                     _mboxParser.ParseMboxIncremental(session.TempFilePath, lastPosition, progress));
 
                 // Convert MimeMessages to ParsedEmailInfo and add to session
+                var newEmails = new List<ParsedEmailInfo>();
                 foreach (var message in result.NewMessages)
                 {
                     var emailInfo = new ParsedEmailInfo
@@ -83,6 +89,7 @@ namespace MboxToPstBlazorApp.Services
                     };
 
                     _sessionService.AddParsedEmail(sessionId, emailInfo);
+                    newEmails.Add(emailInfo);
                 }
 
                 // Update parse position
@@ -91,14 +98,22 @@ namespace MboxToPstBlazorApp.Services
                 _logger.LogInformation("Parsed {NewEmailCount} new emails for session {SessionId}. Total: {TotalCount}", 
                     result.NewMessages.Count, sessionId, session.ParsedEmailCount);
 
+                // Send real-time notification if we have new emails
+                if (newEmails.Count > 0)
+                {
+                    await _hubContext.NotifyNewEmails(sessionId, newEmails);
+                }
+
                 // Update session status
                 if (session.Status == UploadStatus.Completed && !result.HasMoreData)
                 {
                     _sessionService.UpdateSessionStatus(sessionId, UploadStatus.ParseCompleted);
+                    await _hubContext.NotifyParsingStatus(sessionId, "ParseCompleted", session.ParsedEmailCount);
                 }
                 else if (session.Status != UploadStatus.Completed)
                 {
                     _sessionService.UpdateSessionStatus(sessionId, UploadStatus.InProgress);
+                    await _hubContext.NotifyParsingStatus(sessionId, "Parsing", session.ParsedEmailCount);
                 }
 
                 return result.NewMessages.Count > 0;

@@ -138,6 +138,27 @@ namespace MboxToPstBlazorApp.Services
             }
         }
 
+        public async Task<EmailPageResponse?> GetParsedEmails(string sessionId, int page = 1, int pageSize = 20)
+        {
+            try
+            {
+                var response = await _httpClient.GetAsync($"/api/upload/session/{sessionId}/emails?page={page}&pageSize={pageSize}");
+                if (response.IsSuccessStatusCode)
+                {
+                    var json = await response.Content.ReadAsStringAsync();
+                    return JsonSerializer.Deserialize<EmailPageResponse>(json, new JsonSerializerOptions 
+                    { 
+                        PropertyNameCaseInsensitive = true 
+                    });
+                }
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         public async Task<List<UploadSessionInfo>> GetAllSessions()
         {
             try
@@ -173,5 +194,14 @@ namespace MboxToPstBlazorApp.Services
         public double ProgressPercentage { get; set; }
         public int ChunkIndex { get; set; }
         public int ParsedEmailCount { get; set; }
+    }
+
+    public class EmailPageResponse
+    {
+        public List<ParsedEmailInfo> Emails { get; set; } = new();
+        public int TotalCount { get; set; }
+        public int Page { get; set; }
+        public int PageSize { get; set; }
+        public int TotalPages { get; set; }
     }
 }
