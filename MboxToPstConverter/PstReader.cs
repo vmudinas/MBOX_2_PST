@@ -103,36 +103,89 @@ public class PstReader
             throw new FileNotFoundException($"PST file not found: {pstFilePath}");
         }
 
-        Console.WriteLine($"Parsing PST file: {pstFilePath}");
+        Console.WriteLine("=== Starting PST File Parsing ===");
+        Console.WriteLine($"File path: {pstFilePath}");
         
         var fileInfo = new FileInfo(pstFilePath);
-        Console.WriteLine($"File size: {fileInfo.Length / 1024 / 1024:F2} MB");
+        var fileSizeInMB = fileInfo.Length / 1024.0 / 1024.0;
+        var fileSizeInBytes = fileInfo.Length;
+        Console.WriteLine($"File size: {fileSizeInMB:F2} MB ({fileSizeInBytes:N0} bytes)");
+        Console.WriteLine($"File created: {fileInfo.CreationTime:yyyy-MM-dd HH:mm:ss}");
+        Console.WriteLine($"File modified: {fileInfo.LastWriteTime:yyyy-MM-dd HH:mm:ss}");
+
+        var parseStartTime = DateTime.Now;
+        Console.WriteLine($"Parse start time: {parseStartTime:yyyy-MM-dd HH:mm:ss}");
+        Console.WriteLine("Opening PST file...");
 
         using var pst = PersonalStorage.FromFile(pstFilePath);
+        Console.WriteLine("PST file opened successfully");
+        Console.WriteLine($"PST format version: {pst.Format}");
+        
+        var rootFolder = pst.RootFolder;
+        Console.WriteLine($"Root folder: {rootFolder.DisplayName}");
+        
+        // Count total folders
+        var folderCount = CountFolders(pst, rootFolder);
+        Console.WriteLine($"Total folders in PST: {folderCount}");
         
         int messageCount = 0;
+        var lastProgressReport = DateTime.Now;
+        
+        Console.WriteLine("Starting message extraction from all folders...");
         
         // Recursively extract messages from all folders
         foreach (var message in ExtractMessagesFromFolder(pst, pst.RootFolder))
         {
             messageCount++;
-            if (messageCount % 50 == 0)
+            
+            // Log detailed info for first few messages
+            if (messageCount <= 5)
             {
-                Console.WriteLine($"Parsed {messageCount} messages...");
+                Console.WriteLine($"Message #{messageCount}: Subject='{message.Subject ?? "(No Subject)"}', " +
+                                $"From='{message.From?.FirstOrDefault()?.ToString() ?? "(No From)"}', " +
+                                $"Date='{message.Date:yyyy-MM-dd HH:mm:ss}'");
             }
+            
+            // Progress reporting every 50 messages or every 10 seconds
+            if (messageCount % 50 == 0 || (DateTime.Now - lastProgressReport).TotalSeconds >= 10)
+            {
+                var elapsed = DateTime.Now - parseStartTime;
+                var messagesPerSecond = messageCount / elapsed.TotalSeconds;
+                
+                var progressMessage = $"Parsed {messageCount} messages from PST ({messagesPerSecond:F1} msg/sec)";
+                Console.WriteLine(progressMessage);
+                
+                lastProgressReport = DateTime.Now;
+            }
+            
             yield return message;
         }
         
-        Console.WriteLine($"Finished parsing PST file. Total messages found: {messageCount}");
+        var parseEndTime = DateTime.Now;
+        var totalParseDuration = parseEndTime - parseStartTime;
+        var finalMessagesPerSecond = messageCount / totalParseDuration.TotalSeconds;
+        
+        Console.WriteLine();
+        Console.WriteLine("=== PST Parsing Summary ===");
+        Console.WriteLine($"Parse end time: {parseEndTime:yyyy-MM-dd HH:mm:ss}");
+        Console.WriteLine($"Total parsing time: {totalParseDuration.TotalSeconds:F2} seconds");
+        Console.WriteLine($"Messages successfully parsed: {messageCount}");
+        Console.WriteLine($"Average processing speed: {finalMessagesPerSecond:F2} messages/second");
+        Console.WriteLine($"File processing speed: {fileSizeInMB / totalParseDuration.TotalSeconds:F2} MB/second");
+        Console.WriteLine("=== PST Parsing Completed ===");
     }
 
     private IEnumerable<MimeMessage> ExtractMessagesFromFolder(PersonalStorage pst, FolderInfo folder)
     {
         // Extract messages from current folder
         var messages = new List<MimeMessage>();
+        int folderMessageCount = 0;
+        
+        Console.WriteLine($"Processing folder: '{folder.DisplayName}' - Checking for messages...");
         
         foreach (var messageInfo in folder.EnumerateMessages())
         {
+            folderMessageCount++;
             try
             {
                 var mapiMessage = pst.ExtractMessage(messageInfo);
@@ -144,10 +197,12 @@ public class PstReader
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to extract message from folder '{folder.DisplayName}': {ex.Message}");
+                Console.WriteLine($"Failed to extract message #{folderMessageCount} from folder '{folder.DisplayName}': {ex.Message}");
                 // Continue processing other messages
             }
         }
+
+        Console.WriteLine($"Folder '{folder.DisplayName}': Found {folderMessageCount} message infos, converted {messages.Count} successfully");
 
         foreach (var message in messages)
         {
@@ -155,8 +210,12 @@ public class PstReader
         }
 
         // Recursively process subfolders
-        foreach (var subFolder in folder.GetSubFolders())
+        var subFolders = folder.GetSubFolders().ToList();
+        Console.WriteLine($"Folder '{folder.DisplayName}': Found {subFolders.Count} subfolders");
+        
+        foreach (var subFolder in subFolders)
         {
+            Console.WriteLine($"Processing subfolder: '{subFolder.DisplayName}'");
             foreach (var message in ExtractMessagesFromFolder(pst, subFolder))
             {
                 yield return message;
@@ -281,6 +340,19 @@ public class PstReader
         foreach (var subFolder in folder.GetSubFolders())
         {
             count += CountMessagesInFolder(pst, subFolder, progress, fileSizeInMB);
+        }
+
+        return count;
+    }
+
+    private int CountFolders(PersonalStorage pst, FolderInfo folder)
+    {
+        int count = 1; // Count current folder
+        
+        // Recursively count subfolders
+        foreach (var subFolder in folder.GetSubFolders())
+        {
+            count += CountFolders(pst, subFolder);
         }
 
         return count;

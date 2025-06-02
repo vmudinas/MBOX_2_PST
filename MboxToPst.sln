@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MboxToPstConverter", "MboxT
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MboxToPstBlazorApp", "MboxToPstBlazorApp\MboxToPstBlazorApp.csproj", "{7D902BFF-9694-46FD-A76E-B7973E67DDEC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MboxToPstConverter.Tests", "MboxToPstConverter.Tests\MboxToPstConverter.Tests.csproj", "{A398B976-823A-4451-BDA6-2080326DB533}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,5 +26,9 @@ Global
 		{7D902BFF-9694-46FD-A76E-B7973E67DDEC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7D902BFF-9694-46FD-A76E-B7973E67DDEC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7D902BFF-9694-46FD-A76E-B7973E67DDEC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A398B976-823A-4451-BDA6-2080326DB533}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A398B976-823A-4451-BDA6-2080326DB533}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A398B976-823A-4451-BDA6-2080326DB533}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A398B976-823A-4451-BDA6-2080326DB533}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
