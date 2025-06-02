@@ -159,6 +159,19 @@ namespace MboxToPstBlazorApp.Services
             }
         }
 
+        public async Task<bool> DeleteSession(string sessionId)
+        {
+            try
+            {
+                var response = await _httpClient.DeleteAsync($"/api/upload/session/{sessionId}");
+                return response.IsSuccessStatusCode;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public async Task<List<UploadSessionInfo>> GetAllSessions()
         {
             try

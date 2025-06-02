@@ -46,6 +46,14 @@ builder.Services.AddAuthentication();
 
 var app = builder.Build();
 
+// Start cleanup service for old upload sessions
+using (var scope = app.Services.CreateScope())
+{
+    var uploadService = scope.ServiceProvider.GetRequiredService<UploadSessionService>();
+    // Perform initial cleanup on startup
+    uploadService.CleanupOldSessions(TimeSpan.FromDays(1));
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
