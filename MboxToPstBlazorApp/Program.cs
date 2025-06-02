@@ -37,9 +37,11 @@ builder.Services.AddScoped<ChunkedUploadService>();
 // Add HttpClient for API calls
 builder.Services.AddHttpClient<ChunkedUploadService>(client =>
 {
-    // Configure base address if needed
     client.Timeout = TimeSpan.FromMinutes(30); // Long timeout for large uploads
 });
+
+// Add HttpContextAccessor to support getting current request context
+builder.Services.AddHttpContextAccessor();
 
 // Add minimal authentication for Gmail OAuth
 builder.Services.AddAuthentication();
