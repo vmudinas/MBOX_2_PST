@@ -28,6 +28,14 @@ builder.Services.Configure<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServe
 builder.Services.AddScoped<EmailService>();
 builder.Services.AddScoped<GmailService>();
 builder.Services.AddSingleton<UploadSessionService>();
+builder.Services.AddScoped<ChunkedUploadService>();
+
+// Add HttpClient for API calls
+builder.Services.AddHttpClient<ChunkedUploadService>(client =>
+{
+    // Configure base address if needed
+    client.Timeout = TimeSpan.FromMinutes(30); // Long timeout for large uploads
+});
 
 // Add minimal authentication for Gmail OAuth
 builder.Services.AddAuthentication();
