@@ -188,7 +188,20 @@
         {
             <div class="card mt-4">
                 <div class="card-header">
-                    <h5>Email Messages (@emails.Count total)</h5>
+                    <h5>
+                        @if (isPreviewMode)
+                        {
+                            <text>Email Messages (@emails.Count preview of @totalEmailCount total)</text>
+                        }
+                        else
+                        {
+                            <text>Email Messages (@emails.Count total)</text>
+                        }
+                    </h5>
+                    @if (isPreviewMode)
+                    {
+                        <small class="text-muted">Showing first @emails.Count emails for performance. Full conversion will process all @totalEmailCount emails.</small>
+                    }
                 </div>
                 <div class="card-body">
                     <div class="row">
@@ -318,6 +331,8 @@
 
     private List<EmailSummary> emails = new();
     private EmailSummary? selectedEmail = null;
+    private int totalEmailCount = 0;
+    private bool isPreviewMode = false;
 
     // Pagination
     private int currentPage = 1;
@@ -426,6 +441,8 @@
         localLoadingMessage = "Loading emails...";
         emails.Clear();
         selectedEmail = null;
+        totalEmailCount = 0;
+        isPreviewMode = false;
         StateHasChanged();
 
         try
@@ -436,10 +453,50 @@
                 InvokeAsync(StateHasChanged);
             });
 
-            var emailSummaries = await EmailService.GetEmailsFromMboxAsync(localFilePath, progress);
-            emails = emailSummaries;
-            currentPage = 1;
-            localLoadingMessage = $"Loaded {emails.Count} emails successfully.";
+            // Detect file type based on extension
+            var fileExtension = Path.GetExtension(localFilePath).ToLowerInvariant();
+            
+            if (fileExtension == ".mbox")
+            {
+                // Use metadata approach for MBOX files to handle large files efficiently
+                var metadata = await EmailService.GetEmailMetadataFromMboxAsync(localFilePath, progress);
+                emails = metadata.PreviewEmails;
+                totalEmailCount = metadata.TotalEmailCount;
+                isPreviewMode = metadata.TotalEmailCount > metadata.PreviewEmails.Count;
+                
+                currentPage = 1;
+                if (isPreviewMode)
+                {
+                    localLoadingMessage = $"Loaded {emails.Count} preview emails of {totalEmailCount} total emails.";
+                }
+                else
+                {
+                    localLoadingMessage = $"Loaded all {emails.Count} emails successfully.";
+                }
+            }
+            else if (fileExtension == ".pst")
+            {
+                // Use metadata approach for PST files as well
+                var metadata = await EmailService.GetEmailMetadataFromPstAsync(localFilePath, progress);
+                emails = metadata.PreviewEmails;
+                totalEmailCount = metadata.TotalEmailCount;
+                isPreviewMode = metadata.TotalEmailCount > metadata.PreviewEmails.Count;
+                
+                currentPage = 1;
+                if (isPreviewMode)
+                {
+                    localLoadingMessage = $"Loaded {emails.Count} preview emails of {totalEmailCount} total emails.";
+                }
+                else
+                {
+                    localLoadingMessage = $"Loaded all {emails.Count} emails successfully.";
+                }
+            }
+            else
+            {
+                localLoadingMessage = "Unsupported file format. Please select a .mbox or .pst file.";
+                return;
+            }
         }
         catch (Exception ex)
         {
