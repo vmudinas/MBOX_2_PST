@@ -6,10 +6,10 @@ A .NET solution for converting MBOX files to PST format with both console and we
 ## Features
 
 - .NET console application that converts between MBOX and PST formats **bidirectionally**
-- .NET Blazor web application for email viewing and conversion management
+- .NET Blazor web application for email conversion with a user-friendly interface
 - Uses MimeKit for MBOX parsing and Aspose.Email for PST creation/reading
 - Command-line interface for easy automation
-- Web-based user interface for interactive email viewing and conversion
+- Web-based user interface for interactive email conversion
 - Preserves email metadata, attachments, and formatting
 
 ## Console Application
@@ -157,12 +157,10 @@ If no messages are being processed:
 ### Features
 
 - Cross-platform web-based user interface
-- Email viewing for both MBOX and PST formats
-- Interactive file selection for input and output paths
+- Interactive file selection for input and output paths  
 - Real-time conversion progress display
-- Email list browsing and content preview
-- **Large file support**: Upload files up to 50GB with streaming technology
-- **Progress tracking**: Real-time upload progress with chunked streaming
+- Email preview functionality for converted files
+- **File upload support**: Upload files with progress tracking
 - **Download functionality**: Secure download links for converted files
 
 ### Requirements
@@ -176,18 +174,7 @@ cd MboxToPstBlazorApp
 dotnet run
 ```
 
-Then open https://localhost:5001 (or the URL shown in the console) in your web browser.
-
-### Large File Support
-
-The Blazor web application supports uploading large email files (up to 50GB) using:
-
-- **Streaming upload**: Files are uploaded in 1MB chunks to prevent memory issues
-- **Progress tracking**: Real-time progress updates during upload
-- **Server configuration**: Optimized server settings for large file handling
-- **Download functionality**: Secure download links for converted files
-
-This makes it suitable for processing very large MBOX or PST files that were previously limited to 10GB.
+Then open https://localhost:5001 (or the URL shown in the console) in your web browser to access the conversion interface.
 
 ### Building
 
